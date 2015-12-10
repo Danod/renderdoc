@@ -32,3 +32,9 @@ ipch/
 *.shfbproj_*
 
 renderdocui/3rdparty/ironpython/pythonlibs.zip
+
+*.xcuserstate
+
+*.xcuserstate
+
+*.xcuserstate
