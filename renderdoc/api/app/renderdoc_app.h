@@ -382,6 +382,8 @@ typedef uint32_t (RENDERDOC_CC *pRENDERDOC_LaunchReplayUI)(uint32_t connectRemot
 // ignored and the others will be filled out.
 typedef void (RENDERDOC_CC *pRENDERDOC_GetAPIVersion)(int *major, int *minor, int *patch);
 
+typedef void (RENDERDOC_CC *pRENDERDOC_Initialise)();
+
 //////////////////////////////////////////////////////////////////////////
 // Capturing functions
 //
@@ -460,6 +462,8 @@ typedef struct
 {
 	pRENDERDOC_GetAPIVersion              GetAPIVersion;
 
+	pRENDERDOC_Initialise                 Initialise;
+
 	pRENDERDOC_SetCaptureOptionU32        SetCaptureOptionU32;
 	pRENDERDOC_SetCaptureOptionF32        SetCaptureOptionF32;
 
@@ -517,7 +521,7 @@ typedef RENDERDOC_API_1_0_1 RENDERDOC_API_1_0_0;
 //   1 - if the outAPIPointers has been filled with a pointer to the API struct requested
 //   0 - if the requested version is not supported or the arguments are invalid.
 //
-typedef int (RENDERDOC_CC *pRENDERDOC_GetAPI)(RENDERDOC_Version version, void **outAPIPointers);
+int RENDERDOC_CC RENDERDOC_GetAPI(RENDERDOC_Version version, void **outAPIPointers);
 
 #ifdef __cplusplus
 }  // extern "C"

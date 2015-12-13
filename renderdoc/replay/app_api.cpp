@@ -30,6 +30,13 @@
 #include "api/app/renderdoc_app.h"
 #include "api/replay/renderdoc_replay.h" // for RENDERDOC_API to export the RENDERDOC_GetAPI function
 
+
+void RENDERDOC_CC Initialise()
+{
+	RenderDoc::Inst().Initialise();
+	LibraryHooks::GetInstance().CreateHooks();
+}
+
 static void SetFocusToggleKeys(RENDERDOC_InputButton *keys, int num)
 {
 	RenderDoc::Inst().SetFocusKeys(keys, num);
@@ -165,6 +172,8 @@ void Init_1_0_1()
 
 	api.GetAPIVersion = &GetAPIVersion_1_0_1;
 
+	api.Initialise = &Initialise;
+
 	api.SetCaptureOptionU32 = &SetCaptureOptionU32;
 	api.SetCaptureOptionF32 = &SetCaptureOptionF32;
 
@@ -198,7 +207,7 @@ void Init_1_0_1()
 	api.EndFrameCapture = &EndFrameCapture;
 }
 
-extern "C" RENDERDOC_API int RENDERDOC_CC RENDERDOC_GetAPI(RENDERDOC_Version version, void **outAPIPointers)
+extern "C" int RENDERDOC_CC RENDERDOC_GetAPI(RENDERDOC_Version version, void **outAPIPointers)
 {
 	if(outAPIPointers == NULL)
 	{

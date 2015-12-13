@@ -81,9 +81,8 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 {
 	if(ul_reason_for_call == DLL_PROCESS_ATTACH)
 	{
-#ifdef _DEBUG
 		MessageBox(NULL, L"renderdoc.dll!DllMain", NULL, MB_OK);
-#endif
+
 		BOOL ret = add_hooks();
 		SetLastError(0);
 		return ret;
