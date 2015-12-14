@@ -521,7 +521,7 @@ typedef RENDERDOC_API_1_0_1 RENDERDOC_API_1_0_0;
 //   1 - if the outAPIPointers has been filled with a pointer to the API struct requested
 //   0 - if the requested version is not supported or the arguments are invalid.
 //
-int RENDERDOC_CC RENDERDOC_GetAPI(RENDERDOC_Version version, void **outAPIPointers);
+typedef int (RENDERDOC_CC *pRENDERDOC_GetAPI)(RENDERDOC_Version version, void **outAPIPointers);
 
 #ifdef __cplusplus
 }  // extern "C"

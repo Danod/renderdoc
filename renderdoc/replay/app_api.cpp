@@ -207,7 +207,7 @@ void Init_1_0_1()
 	api.EndFrameCapture = &EndFrameCapture;
 }
 
-extern "C" int RENDERDOC_CC RENDERDOC_GetAPI(RENDERDOC_Version version, void **outAPIPointers)
+extern "C" RENDERDOC_API int RENDERDOC_CC RENDERDOC_GetAPI(RENDERDOC_Version version, void **outAPIPointers)
 {
 	if(outAPIPointers == NULL)
 	{
