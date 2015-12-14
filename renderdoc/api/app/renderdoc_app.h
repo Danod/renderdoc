@@ -382,8 +382,6 @@ typedef uint32_t (RENDERDOC_CC *pRENDERDOC_LaunchReplayUI)(uint32_t connectRemot
 // ignored and the others will be filled out.
 typedef void (RENDERDOC_CC *pRENDERDOC_GetAPIVersion)(int *major, int *minor, int *patch);
 
-typedef void (RENDERDOC_CC *pRENDERDOC_Initialise)();
-
 //////////////////////////////////////////////////////////////////////////
 // Capturing functions
 //
@@ -461,8 +459,6 @@ typedef enum
 typedef struct
 {
 	pRENDERDOC_GetAPIVersion              GetAPIVersion;
-
-	pRENDERDOC_Initialise                 Initialise;
 
 	pRENDERDOC_SetCaptureOptionU32        SetCaptureOptionU32;
 	pRENDERDOC_SetCaptureOptionF32        SetCaptureOptionF32;
