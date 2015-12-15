@@ -633,6 +633,10 @@ void DXBCFile::MakeDisassemblyString()
 			
 			prevFile = fileID;
 			prevLine = lineNum;
+
+			// save fileID and lineIdx
+			// FX_TODO: ensure 1:1 match the assembly lines.
+			m_SourceDetails.push_back(SourceDetail(prevFile, prevLine));
 		}
 
 		char buf[64] = {0};
