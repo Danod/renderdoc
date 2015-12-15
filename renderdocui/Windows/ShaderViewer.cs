@@ -1296,6 +1296,14 @@ namespace renderdocui.Windows
                     m_DisassemblyView.Lines[i].DeleteMarkerSet(FinishedMarkers);
                 }
 
+                for (int j = 1; j < m_Scintillas.Count; j++)
+                {
+                    for (int i = 0; i < m_Scintillas[j].Lines.Count; i++)
+                    {
+                        m_Scintillas[j].Lines[i].DeleteMarkerSet(CurrentLineMarkers);
+                    }
+                }
+
                 return;
             }
 
@@ -1329,6 +1337,27 @@ namespace renderdocui.Windows
             }
 
             m_DisassemblyView.Invalidate();
+
+            if (m_Scintillas.Count > 1)
+            {
+                // FX_TODO: consider all source files instead of only the first.
+                ScintillaNET.Scintilla sourceFile = m_Scintillas[1];
+                for (int i = 0; i < sourceFile.Lines.Count; i++)
+                {
+                    sourceFile.Lines[i].DeleteMarkerSet(CurrentLineMarkers);
+
+                    Int32 lineIdx = m_ShaderDetails.SourceDetails[nextInst].lineIdx;
+                    if (i == lineIdx)
+                    {
+                        sourceFile.Lines[i].AddMarkerSet(CurrentLineMarkers);
+                        sourceFile.Caret.LineNumber = i;
+
+                        if (!sourceFile.Lines[i].IsVisible)
+                            sourceFile.Scrolling.ScrollToCaret();
+                    }
+                }
+            }
+            m_Scintillas[1].Invalidate();
 
             hoverTimer_Tick(hoverTimer, new EventArgs());
 
