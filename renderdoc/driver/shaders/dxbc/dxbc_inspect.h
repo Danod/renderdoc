@@ -325,6 +325,7 @@ class DXBCFile
 
 		ShaderStatistics m_ShaderStats;
 		DXBCDebugChunk *m_DebugInfo;
+		vector<SourceDetail> m_SourceDetails;
 		
 		vector<uint32_t> m_Immediate;
 

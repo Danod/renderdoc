@@ -54,6 +54,9 @@ namespace renderdocui.Windows
         private List<int> BreakpointMarkers = new List<int>();
         private List<int> FinishedMarkers = new List<int>();
 
+        private List<int> CurrentLineMarkersInSource = new List<int>();
+        private List<int> FinishedMarkersInSource = new List<int>();
+
         private Core m_Core = null;
         private ShaderReflection m_ShaderDetails = null;
         private D3D11PipelineState.ShaderStage m_Stage = null;
@@ -543,7 +546,8 @@ namespace renderdocui.Windows
                 w.CloseButtonVisible = false;
             }
 
-            if (shader != null && shader.DebugInfo.entryFunc.Length > 0 && shader.DebugInfo.files.Length > 0)
+            // FX DeBugger Hackathon: to load the shader source tab.
+            if (shader != null /*&& shader.DebugInfo.entryFunc.Length > 0*/ && shader.DebugInfo.files.Length > 0)
             {
                 if(trace != null)
                     Text = String.Format("Debug {0}() - {1}", shader.DebugInfo.entryFunc, debugContext);
@@ -568,6 +572,14 @@ namespace renderdocui.Windows
                     w.CloseButton = false;
                     w.CloseButtonVisible = false;
                     w.Show(dockPanel);
+
+                    scintilla1.Markers[CURRENT_MARKER].BackColor = System.Drawing.Color.LightCoral;
+                    scintilla1.Markers[CURRENT_MARKER].Symbol = ScintillaNET.MarkerSymbol.Background;
+                    CurrentLineMarkersInSource.Add(CURRENT_MARKER);
+
+                    scintilla1.Markers[FINISHED_MARKER].BackColor = System.Drawing.Color.LightSlateGray;
+                    scintilla1.Markers[FINISHED_MARKER].Symbol = ScintillaNET.MarkerSymbol.Background;
+                    FinishedMarkersInSource.Add(FINISHED_MARKER);
 
                     m_Scintillas.Add(scintilla1);
 
@@ -1296,6 +1308,15 @@ namespace renderdocui.Windows
                     m_DisassemblyView.Lines[i].DeleteMarkerSet(FinishedMarkers);
                 }
 
+                for (int j = 1; j < m_Scintillas.Count; j++)
+                {
+                    for (int i = 0; i < m_Scintillas[j].Lines.Count; i++)
+                    {
+                        m_Scintillas[j].Lines[i].DeleteMarkerSet(CurrentLineMarkersInSource);
+                        m_Scintillas[j].Lines[i].DeleteMarkerSet(FinishedMarkersInSource);
+                    }
+                }
+
                 return;
             }
 
@@ -1329,6 +1350,29 @@ namespace renderdocui.Windows
             }
 
             m_DisassemblyView.Invalidate();
+
+            if (m_Scintillas.Count > 1)
+            {
+                // FX_TODO: consider all source files instead of only the first.
+                ScintillaNET.Scintilla sourceFile = m_Scintillas[1];
+                for (int i = 0; i < sourceFile.Lines.Count; i++)
+                {
+                    sourceFile.Lines[i].DeleteMarkerSet(CurrentLineMarkersInSource);
+                    sourceFile.Lines[i].DeleteMarkerSet(FinishedMarkersInSource);
+
+                    Int32 lineIdx = m_ShaderDetails.SourceDetails[nextInst].lineIdx;
+                    if (i == lineIdx)
+                    {
+                        sourceFile.Lines[i].AddMarkerSet(done ? FinishedMarkersInSource : CurrentLineMarkersInSource);
+                        sourceFile.Caret.LineNumber = i;
+
+                        if (!sourceFile.Lines[i].IsVisible)
+                            sourceFile.Scrolling.ScrollToCaret();
+                    }
+                }
+                sourceFile.Invalidate();
+            }
+            
 
             hoverTimer_Tick(hoverTimer, new EventArgs());
 

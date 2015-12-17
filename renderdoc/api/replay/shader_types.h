@@ -203,10 +203,28 @@ struct ShaderDebugChunk
 	int32_t entryFile; // index in above array of 'main' file with entry point
 };
 
+struct SourceDetail
+{
+	SourceDetail()
+	{
+		FileID = -1;
+		LineIdx = -1;
+	}
+
+	SourceDetail(int32_t fileID, int32_t lineIdx) : FileID(fileID), LineIdx(lineIdx)
+	{
+
+	}
+
+	int32_t FileID;
+	int32_t LineIdx;
+};
+
 struct ShaderReflection
 {
 	ShaderDebugChunk DebugInfo;
 	rdctype::str Disassembly;
+	rdctype::array<SourceDetail> SourceDetials;
 
 	uint32_t DispatchThreadsDimension[3];
 

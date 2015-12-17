@@ -944,6 +944,13 @@ ShaderReflection *MakeShaderReflection(DXBC::DXBCFile *dxbc)
 
 	ret->Disassembly = dxbc->GetDisassembly();
 
+	create_array_uninit(ret->SourceDetials, dxbc->m_SourceDetails.size());
+	for (size_t i = 0; i < dxbc->m_SourceDetails.size(); i++)
+	{
+		ret->SourceDetials[i].FileID = dxbc->m_SourceDetails[i].FileID;
+		ret->SourceDetials[i].LineIdx = dxbc->m_SourceDetails[i].LineIdx;
+	}
+
 	ret->DispatchThreadsDimension[0] = dxbc->DispatchThreadsDimension[0];
 	ret->DispatchThreadsDimension[1] = dxbc->DispatchThreadsDimension[1];
 	ret->DispatchThreadsDimension[2] = dxbc->DispatchThreadsDimension[2];

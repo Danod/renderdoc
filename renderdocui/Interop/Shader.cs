@@ -411,6 +411,13 @@ namespace renderdoc
 
         public Int32 entryFile;
     };
+
+    [StructLayout(LayoutKind.Sequential)]
+    public class SourceDetail
+    {
+        public Int32 fileID;
+        public Int32 lineIdx;
+    };
     
     [StructLayout(LayoutKind.Sequential)]
     public class ShaderReflection
@@ -420,6 +427,9 @@ namespace renderdoc
 
         [CustomMarshalAs(CustomUnmanagedType.UTF8TemplatedString)]
         public string Disassembly;
+
+        [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
+        public SourceDetail[] SourceDetails;
 
         [CustomMarshalAs(CustomUnmanagedType.FixedArray, FixedLength = 3)]
         public UInt32[] DispatchThreadsDimension;
