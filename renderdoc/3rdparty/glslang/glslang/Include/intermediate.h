@@ -238,6 +238,8 @@ enum TOperator {
 
     EOpFtransform,
 
+    EOpNoise,
+
     EOpEmitVertex,           // geometry only
     EOpEndPrimitive,         // geometry only
     EOpEmitStreamVertex,     // geometry only
@@ -322,6 +324,7 @@ enum TOperator {
     EOpConstructDMat4x3,
     EOpConstructDMat4x4,
     EOpConstructStruct,
+    EOpConstructTextureSampler,
     EOpConstructGuardEnd,
 
     //
@@ -369,6 +372,10 @@ enum TOperator {
     EOpImageAtomicExchange,
     EOpImageAtomicCompSwap,
 
+    EOpSubpassLoad,
+    EOpSubpassLoadMS,
+    EOpSparseImageLoad,
+
     EOpImageGuardEnd,
 
     //
@@ -398,6 +405,31 @@ enum TOperator {
     EOpTextureGather,
     EOpTextureGatherOffset,
     EOpTextureGatherOffsets,
+    EOpTextureClamp,
+    EOpTextureOffsetClamp,
+    EOpTextureGradClamp,
+    EOpTextureGradOffsetClamp,
+
+    EOpSparseTextureGuardBegin,
+
+    EOpSparseTexture,
+    EOpSparseTextureLod,
+    EOpSparseTextureOffset,
+    EOpSparseTextureFetch,
+    EOpSparseTextureFetchOffset,
+    EOpSparseTextureLodOffset,
+    EOpSparseTextureGrad,
+    EOpSparseTextureGradOffset,
+    EOpSparseTextureGather,
+    EOpSparseTextureGatherOffset,
+    EOpSparseTextureGatherOffsets,
+    EOpSparseTexelsResident,
+    EOpSparseTextureClamp,
+    EOpSparseTextureOffsetClamp,
+    EOpSparseTextureGradClamp,
+    EOpSparseTextureGradOffsetClamp,
+
+    EOpSparseTextureGuardEnd,
 
     EOpTextureGuardEnd,
 
@@ -577,28 +609,32 @@ protected:
 //
 class TIntermSymbol : public TIntermTyped {
 public:
-    // if symbol is initialized as symbol(sym), the memory comes from the poolallocator of sym. If sym comes from
+    // if symbol is initialized as symbol(sym), the memory comes from the pool allocator of sym. If sym comes from
     // per process threadPoolAllocator, then it causes increased memory usage per compile
     // it is essential to use "symbol = sym" to assign to symbol
-    TIntermSymbol(int i, const TString& n, const TType& t) : 
-        TIntermTyped(t), id(i) { name = n;} 
+    TIntermSymbol(int i, const TString& n, const TType& t)
+        : TIntermTyped(t), id(i), constSubtree(nullptr)
+          { name = n; }
     virtual int getId() const { return id; }
     virtual const TString& getName() const { return name; }
     virtual void traverse(TIntermTraverser*);
     virtual       TIntermSymbol* getAsSymbolNode()       { return this; }
     virtual const TIntermSymbol* getAsSymbolNode() const { return this; }
-    void setConstArray(const TConstUnionArray& c) { unionArray = c; }
-    const TConstUnionArray& getConstArray() const { return unionArray; }
+    void setConstArray(const TConstUnionArray& c) { constArray = c; }
+    const TConstUnionArray& getConstArray() const { return constArray; }
+    void setConstSubtree(TIntermTyped* subtree) { constSubtree = subtree; }
+    TIntermTyped* getConstSubtree() const { return constSubtree; }
 protected:
-    int id;
-    TString name;
-    TConstUnionArray unionArray;
+    int id;                      // the unique id of the symbol this node represents
+    TString name;                // the name of the symbol this node represents
+    TConstUnionArray constArray; // if the symbol is a front-end compile-time constant, this is its value
+    TIntermTyped* constSubtree;
 };
 
 class TIntermConstantUnion : public TIntermTyped {
 public:
-    TIntermConstantUnion(const TConstUnionArray& ua, const TType& t) : TIntermTyped(t), unionArray(ua), literal(false) { }
-    const TConstUnionArray& getConstArray() const { return unionArray; }
+    TIntermConstantUnion(const TConstUnionArray& ua, const TType& t) : TIntermTyped(t), constArray(ua), literal(false) { }
+    const TConstUnionArray& getConstArray() const { return constArray; }
     virtual       TIntermConstantUnion* getAsConstantUnion()       { return this; }
     virtual const TIntermConstantUnion* getAsConstantUnion() const { return this; }
     virtual void traverse(TIntermTraverser*);
@@ -608,7 +644,7 @@ public:
     void setExpression() { literal = false; }
     bool isLiteral() const { return literal; }
 protected:
-    const TConstUnionArray unionArray;
+    const TConstUnionArray constArray;
     bool literal;  // true if node represents a literal in the source code
 };
 
@@ -622,6 +658,8 @@ struct TCrackedTextureOp {
     bool offsets;
     bool gather;
     bool grad;
+    bool subpass;
+    bool lodClamp;
 };
 
 //
@@ -637,6 +675,8 @@ public:
     bool isConstructor() const;
     bool isTexture() const { return op > EOpTextureGuardBegin && op < EOpTextureGuardEnd; }
     bool isImage()   const { return op > EOpImageGuardBegin   && op < EOpImageGuardEnd; }
+    bool isSparseTexture() const { return op > EOpSparseTextureGuardBegin && op < EOpSparseTextureGuardEnd; }
+    bool isSparseImage()   const { return op == EOpSparseImageLoad; }
 
     // Crack the op into the individual dimensions of texturing operation.
     void crackTexture(TSampler sampler, TCrackedTextureOp& cracked) const
@@ -649,6 +689,8 @@ public:
         cracked.offsets = false;
         cracked.gather = false;
         cracked.grad = false;
+        cracked.subpass = false;
+        cracked.lodClamp = false;
 
         switch (op) {
         case EOpImageQuerySize:
@@ -657,25 +699,40 @@ public:
         case EOpTextureQueryLod:
         case EOpTextureQueryLevels:
         case EOpTextureQuerySamples:
+        case EOpSparseTexelsResident:
             cracked.query = true;
             break;
         case EOpTexture:
+        case EOpSparseTexture:
+            break;
+        case EOpTextureClamp:
+        case EOpSparseTextureClamp:
+            cracked.lodClamp = true;
             break;
         case EOpTextureProj:
             cracked.proj = true;
             break;
         case EOpTextureLod:
+        case EOpSparseTextureLod:
             cracked.lod = true;
             break;
         case EOpTextureOffset:
+        case EOpSparseTextureOffset:
             cracked.offset = true;
             break;
+        case EOpTextureOffsetClamp:
+        case EOpSparseTextureOffsetClamp:
+            cracked.offset = true;
+            cracked.lodClamp = true;
+            break;
         case EOpTextureFetch:
+        case EOpSparseTextureFetch:
             cracked.fetch = true;
             if (sampler.dim == Esd1D || (sampler.dim == Esd2D && ! sampler.ms) || sampler.dim == Esd3D)
                 cracked.lod = true;
             break;
         case EOpTextureFetchOffset:
+        case EOpSparseTextureFetchOffset:
             cracked.fetch = true;
             cracked.offset = true;
             if (sampler.dim == Esd1D || (sampler.dim == Esd2D && ! sampler.ms) || sampler.dim == Esd3D)
@@ -686,6 +743,7 @@ public:
             cracked.proj = true;
             break;
         case EOpTextureLodOffset:
+        case EOpSparseTextureLodOffset:
             cracked.offset = true;
             cracked.lod = true;
             break;
@@ -699,9 +757,16 @@ public:
             cracked.proj = true;
             break;
         case EOpTextureGrad:
+        case EOpSparseTextureGrad:
             cracked.grad = true;
             break;
+        case EOpTextureGradClamp:
+        case EOpSparseTextureGradClamp:
+            cracked.grad = true;
+            cracked.lodClamp = true;
+            break;
         case EOpTextureGradOffset:
+        case EOpSparseTextureGradOffset:
             cracked.grad = true;
             cracked.offset = true;
             break;
@@ -714,16 +779,29 @@ public:
             cracked.offset = true;
             cracked.proj = true;
             break;
+        case EOpTextureGradOffsetClamp:
+        case EOpSparseTextureGradOffsetClamp:
+            cracked.grad = true;
+            cracked.offset = true;
+            cracked.lodClamp = true;
+            break;
         case EOpTextureGather:
+        case EOpSparseTextureGather:
             cracked.gather = true;
             break;
         case EOpTextureGatherOffset:
+        case EOpSparseTextureGatherOffset:
             cracked.gather = true;
             cracked.offset = true;
             break;
         case EOpTextureGatherOffsets:
+        case EOpSparseTextureGatherOffsets:
             cracked.gather = true;
             cracked.offsets = true;
+            break;
+        case EOpSubpassLoad:
+        case EOpSubpassLoadMS:
+            cracked.subpass = true;
             break;
         default:
             break;
@@ -872,7 +950,7 @@ enum TVisit
 //
 // Explicitly set postVisit to true if you want post visiting, otherwise,
 // filled in methods will only be called at pre-visit time (before processing
-// the subtree).  Similary for inVisit for in-order visiting of nodes with
+// the subtree).  Similarly for inVisit for in-order visiting of nodes with
 // multiple children.
 //
 // If you only want post-visits, explicitly turn off preVisit (and inVisit) 
@@ -905,7 +983,7 @@ public:
     void incrementDepth(TIntermNode *current)
     {
         depth++;
-        maxDepth = std::max(maxDepth, depth);
+        maxDepth = (std::max)(maxDepth, depth);
         path.push_back(current);
     }
 
@@ -934,6 +1012,14 @@ protected:
     // All the nodes from root to the current node's parent during traversing.
     TVector<TIntermNode *> path;
 };
+
+// KHR_vulkan_glsl says "Two arrays sized with specialization constants are the same type only if
+// sized with the same symbol, involving no operations"
+inline bool SameSpecializationConstants(TIntermTyped* node1, TIntermTyped* node2)
+{
+    return node1->getAsSymbolNode() && node2->getAsSymbolNode() &&
+           node1->getAsSymbolNode()->getId() == node2->getAsSymbolNode()->getId();
+}
 
 } // end namespace glslang
 

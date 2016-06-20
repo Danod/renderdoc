@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -224,6 +225,8 @@ namespace renderdoc
         public byte channelUsedMask;
         public UInt32 compCount;
         public UInt32 stream;
+
+        public UInt32 arrayIndex;
         
 		public string TypeString
         {
@@ -294,6 +297,7 @@ namespace renderdoc
             public UInt32 cols;
             public UInt32 elements;
             public bool rowMajorStorage;
+            public UInt32 arrayStride;
             [CustomMarshalAs(CustomUnmanagedType.UTF8TemplatedString)]
             public string name;
         };
@@ -321,6 +325,8 @@ namespace renderdoc
         [CustomMarshalAs(CustomUnmanagedType.CustomClass)]
         public RegSpan reg;
 
+        public UInt64 defaultValue;
+
         [CustomMarshalAs(CustomUnmanagedType.CustomClass)]
         public ShaderVariableType type;
     };
@@ -344,7 +350,6 @@ namespace renderdoc
         public bool IsSampler;
         public bool IsTexture;
         public bool IsSRV;
-        public bool IsReadWrite;
 
         public ShaderResourceType resType;
 
@@ -440,10 +445,13 @@ namespace renderdoc
         public SigParameter[] OutputSig;
 
         [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
-        public ConstantBlock[] ConstantBlocks; // sparse - index indicates bind point
+        public ConstantBlock[] ConstantBlocks;
 
         [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
-        public ShaderResource[] Resources; // non-sparse, since bind points can overlap.
+        public ShaderResource[] ReadOnlyResources;
+
+        [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
+        public ShaderResource[] ReadWriteResources;
 
         [StructLayout(LayoutKind.Sequential)]
         public struct Interface
@@ -459,8 +467,45 @@ namespace renderdoc
     [StructLayout(LayoutKind.Sequential)]
     public class BindpointMap
     {
+        public Int32 bindset;
         public Int32 bind;
         public bool used;
+        public UInt32 arraySize;
+
+        public BindpointMap()
+        {
+        }
+
+        public BindpointMap(Int32 set, Int32 slot)
+        {
+            bindset = set;
+            bind = slot;
+            used = false;
+            arraySize = 1;
+        }
+
+        public override bool Equals(Object obj)
+        {
+            return obj is BindpointMap && this == (BindpointMap)obj;
+        }
+        public override int GetHashCode()
+        {
+            int hash = bindset.GetHashCode() * 17;
+            hash = hash * 17 + bind.GetHashCode();
+            return hash;
+        }
+        public static bool operator ==(BindpointMap x, BindpointMap y)
+        {
+            if ((object)x == null) return (object)y == null;
+            if ((object)y == null) return (object)x == null;
+
+            return x.bindset == y.bindset &&
+                x.bind == y.bind;
+        }
+        public static bool operator !=(BindpointMap x, BindpointMap y)
+        {
+            return !(x == y);
+        }
     };
 
     [StructLayout(LayoutKind.Sequential)]
@@ -471,6 +516,8 @@ namespace renderdoc
         [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
         public BindpointMap[] ConstantBlocks;
         [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
-        public BindpointMap[] Resources;
+        public BindpointMap[] ReadOnlyResources;
+        [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
+        public BindpointMap[] ReadWriteResources;
     };
 };

@@ -1,6 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -373,6 +374,10 @@ namespace renderdoc
                 byte[] val = new byte[arr.count];
                 if(val.Length > 0)
                     Marshal.Copy(arr.elems, val, 0, val.Length);
+
+                if (freeMem)
+                    RENDERDOC_FreeArrayMem(arr.elems);
+
                 return val;
             }
             else

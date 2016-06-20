@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -43,23 +44,25 @@ namespace renderdocui.Controls
     {
         private Core m_Core;
 
-        public ConstantBufferPreviewer(Core c, ShaderStageType stage, UInt32 slot)
+        public ConstantBufferPreviewer(Core c, ShaderStageType stage, UInt32 slot, UInt32 idx)
         {
             InitializeComponent();
 
             m_Core = c;
             Stage = stage;
             Slot = slot;
+            ArrayIdx = idx;
             shader = m_Core.CurPipelineState.GetShader(stage);
+            entryPoint = m_Core.CurPipelineState.GetShaderEntryPoint(stage);
             UpdateLabels();
 
-            uint offs = 0;
-            uint size = 0;
-            m_Core.CurPipelineState.GetConstantBuffer(Stage, Slot, out cbuffer, out offs, out size);
+            ulong offs = 0;
+            ulong size = 0;
+            m_Core.CurPipelineState.GetConstantBuffer(Stage, Slot, ArrayIdx, out cbuffer, out offs, out size);
 
             m_Core.Renderer.BeginInvoke((ReplayRenderer r) =>
             {
-                SetVariables(r.GetCBufferVariableContents(shader, Slot, cbuffer, offs));
+                SetVariables(r.GetCBufferVariableContents(shader, entryPoint, Slot, cbuffer, offs));
             });
 
             m_Core.AddLogViewer(this);
@@ -67,11 +70,11 @@ namespace renderdocui.Controls
 
         private static List<ConstantBufferPreviewer> m_Docks = new List<ConstantBufferPreviewer>();
 
-        public static DockContent Has(ShaderStageType stage, UInt32 slot)
+        public static DockContent Has(ShaderStageType stage, UInt32 slot, UInt32 idx)
         {
             foreach (var cb in m_Docks)
             {
-                if(cb.Stage == stage && cb.Slot == slot)
+                if(cb.Stage == stage && cb.Slot == slot && cb.ArrayIdx == idx)
                     return cb as DockContent;
             }
 
@@ -176,13 +179,14 @@ namespace renderdocui.Controls
             variables.Invalidate();
         }
 
-        public void OnEventSelected(UInt32 frameID, UInt32 eventID)
+        public void OnEventSelected(UInt32 eventID)
         {
-            uint offs = 0;
-            uint size = 0;
-            m_Core.CurPipelineState.GetConstantBuffer(Stage, Slot, out cbuffer, out offs, out size);
+            ulong offs = 0;
+            ulong size = 0;
+            m_Core.CurPipelineState.GetConstantBuffer(Stage, Slot, ArrayIdx, out cbuffer, out offs, out size);
 
             shader = m_Core.CurPipelineState.GetShader(Stage);
+            entryPoint = m_Core.CurPipelineState.GetShaderEntryPoint(Stage);
             var reflection = m_Core.CurPipelineState.GetShaderReflection(Stage);
 
             UpdateLabels();
@@ -204,7 +208,7 @@ namespace renderdocui.Controls
 			{
 				m_Core.Renderer.BeginInvoke((ReplayRenderer r) =>
 				{
-					SetVariables(r.GetCBufferVariableContents(shader, Slot, cbuffer, offs));
+					SetVariables(r.GetCBufferVariableContents(shader, entryPoint, Slot, cbuffer, offs));
 				});
 			}
         }
@@ -213,8 +217,10 @@ namespace renderdocui.Controls
 
         private ResourceId cbuffer;
         private ResourceId shader;
+        private String entryPoint;
         private ShaderStageType Stage;
         private UInt32 Slot = 0;
+        private UInt32 ArrayIdx = 0;
 
         public override string Text
         {
@@ -224,10 +230,15 @@ namespace renderdocui.Controls
                 if (m_Core != null && m_Core.APIProps != null)
                     pipeType = m_Core.APIProps.pipelineType;
 
-                return String.Format("{0} {1} {2}",
+                string ret = String.Format("{0} {1} {2}",
                     Stage.Str(pipeType),
                     pipeType == APIPipelineStateType.D3D11 ? "CB" : "UBO",
                     Slot);
+
+                if (m_Core != null && m_Core.CurPipelineState.SupportsResourceArrays)
+                    ret += String.Format(" [{0}]", ArrayIdx);
+
+                return ret;
             }
         }
 
@@ -406,13 +417,13 @@ namespace renderdocui.Controls
 			{
 				string errors = "";
 
-				m_FormatOverride = FormatElement.ParseFormatString(formatText, false, out errors);
+				m_FormatOverride = FormatElement.ParseFormatString(formatText, 0, false, out errors);
 
 				if (m_FormatSpecifier != null)
 					m_FormatSpecifier.SetErrors(errors);
 			}
 
-			OnEventSelected(m_Core.CurFrame, m_Core.CurEvent);
+			OnEventSelected(m_Core.CurEvent);
 		}
 
 		private void setFormat_CheckedChanged(object sender, EventArgs e)

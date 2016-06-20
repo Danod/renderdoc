@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -75,7 +76,7 @@ namespace renderdocui.Windows.Dialogs
             HookIntoChildren.Checked = settings.Options.HookIntoChildren;
             CaptureCallstacks.Checked = settings.Options.CaptureCallstacks;
             CaptureCallstacksOnlyDraws.Checked = settings.Options.CaptureCallstacksOnlyDraws;
-            DebugDeviceMode.Checked = settings.Options.DebugDeviceMode;
+            APIValidation.Checked = settings.Options.APIValidation;
             RefAllResources.Checked = settings.Options.RefAllResources;
             SaveAllInitials.Checked = settings.Options.SaveAllInitials;
             DelayForDebugger.Value = settings.Options.DelayForDebugger;
@@ -113,7 +114,7 @@ namespace renderdocui.Windows.Dialogs
             ret.Options.HookIntoChildren = HookIntoChildren.Checked;
             ret.Options.CaptureCallstacks = CaptureCallstacks.Checked;
             ret.Options.CaptureCallstacksOnlyDraws = CaptureCallstacksOnlyDraws.Checked;
-            ret.Options.DebugDeviceMode = DebugDeviceMode.Checked;
+            ret.Options.APIValidation = APIValidation.Checked;
             ret.Options.RefAllResources = RefAllResources.Checked;
             ret.Options.SaveAllInitials = SaveAllInitials.Checked;
             ret.Options.CaptureAllCmdLists = CaptureAllCmdLists.Checked;
@@ -173,6 +174,8 @@ namespace renderdocui.Windows.Dialogs
                 core.Config.PreferredFont;
 
             Icon = global::renderdocui.Properties.Resources.icon;
+
+            vulkanLayerWarn.Visible = !Helpers.CheckVulkanLayerRegistration();
 
             var defaults = new CaptureSettings();
             defaults.Inject = false;
@@ -475,6 +478,11 @@ namespace renderdocui.Windows.Dialogs
                 CaptureCallstacksOnlyDraws.Checked = false;
                 CaptureCallstacksOnlyDraws.Enabled = false;
             }
+        }
+
+        private void CaptureDialog_Shown(object sender, EventArgs e)
+        {
+            vulkanLayerWarn.Visible = !Helpers.CheckVulkanLayerRegistration();
         }
 
         #endregion
@@ -813,8 +821,20 @@ namespace renderdocui.Windows.Dialogs
                     MessageBox.Show("Aborting. Couldn't save backup .reg file to " + regfile + Environment.NewLine + ex.ToString(), "Cannot save registry backup",
                                                     MessageBoxButtons.OK, MessageBoxIcon.Error);
 
+                    exePath.Enabled = exeBrowse.Enabled =
+                        workDirPath.Enabled = workDirBrowse.Enabled =
+                        cmdline.Enabled =
+                        capture.Enabled = save.Enabled = load.Enabled = true;
+
+                    foreach (Control c in capOptsFlow.Controls)
+                        c.Enabled = true;
+
+                    foreach (Control c in actionsFlow.Controls)
+                        c.Enabled = true;
+
                     // won't recurse because it's not enabled yet
                     toggleGlobalHook.Checked = false;
+                    toggleGlobalHook.Text = "Enable Global Hook";
 
                     toggleGlobalHook.Enabled = true;
                     return;
@@ -824,8 +844,51 @@ namespace renderdocui.Windows.Dialogs
 
                 pipeExit = false;
 
-                pipe32 = new NamedPipeServerStream("RenderDoc.GlobalHookControl32");
-                pipe64 = new NamedPipeServerStream("RenderDoc.GlobalHookControl64");
+                try
+                {
+                    pipe32 = new NamedPipeServerStream("RenderDoc.GlobalHookControl32");
+                    pipe64 = new NamedPipeServerStream("RenderDoc.GlobalHookControl64");
+                }
+                catch (System.IO.IOException ex)
+                {
+                    // tidy up and exit
+                    MessageBox.Show("Aborting. Couldn't create named pipe:" + Environment.NewLine + ex.Message,
+                                    "Cannot create named pipe",
+                                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+
+                    exePath.Enabled = exeBrowse.Enabled =
+                        workDirPath.Enabled = workDirBrowse.Enabled =
+                        cmdline.Enabled =
+                        capture.Enabled = save.Enabled = load.Enabled = true;
+
+                    foreach (Control c in capOptsFlow.Controls)
+                        c.Enabled = true;
+
+                    foreach (Control c in actionsFlow.Controls)
+                        c.Enabled = true;
+
+                    // need to revert registry entries too
+                    if (Environment.Is64BitProcess)
+                    {
+                        RestoreAppInit(Registry.LocalMachine.CreateSubKey("SOFTWARE").CreateSubKey("Wow6432Node"), prevAppInitWoW64Enabled, prevAppInitWoW64);
+                        RestoreAppInit(Registry.LocalMachine.CreateSubKey("SOFTWARE"), prevAppInitEnabled, prevAppInit);
+                    }
+                    else
+                    {
+                        // if this is a 64-bit OS, it will re-direct our request to Wow6432Node anyway, so we
+                        // don't need to handle that manually
+                        RestoreAppInit(Registry.LocalMachine.CreateSubKey("SOFTWARE"), prevAppInitEnabled, prevAppInit);
+                    }
+
+                    if (File.Exists(regfile)) File.Delete(regfile);
+
+                    // won't recurse because it's not enabled yet
+                    toggleGlobalHook.Checked = false;
+                    toggleGlobalHook.Text = "Enable Global Hook";
+
+                    toggleGlobalHook.Enabled = true;
+                    return;
+                }
 
                 pipeThread = Helpers.NewThread(new ThreadStart(PipeTick));
 
@@ -884,6 +947,66 @@ namespace renderdocui.Windows.Dialogs
         {
             if (toggleGlobalHook.Checked)
                 toggleGlobalHook.Checked = false;
+        }
+
+        private void vulkanLayerWarn_Click(object sender, EventArgs e)
+        {
+            string caption = "Configure Vulkan layer settings in registry?";
+
+            bool hasOtherJSON = false;
+            bool thisRegistered = false;
+            string[] otherJSONs = new string[] {};
+
+            Helpers.CheckVulkanLayerRegistration(out hasOtherJSON, out thisRegistered, out otherJSONs);
+
+            string myJSON = Helpers.GetVulkanJSONPath(false);
+
+            string msg = "Vulkan capture happens through the API's layer mechanism. RenderDoc has detected that ";
+
+            if (hasOtherJSON)
+            {
+                msg += "there " + (otherJSONs.Length > 1 ? "are other RenderDoc builds" : "is another RenderDoc build") +
+                    " registered already. " + (otherJSONs.Length > 1 ? "They" : "It") +
+                    " must be disabled so that capture can happen without nasty clashes.";
+
+                if (!thisRegistered)
+                    msg += " Also ";
+            }
+
+            if (!thisRegistered)
+            {
+                msg += "the layer for this installation is not yet registered. This could be due to an " +
+                    "upgrade from a version that didn't support Vulkan, or if this version is just a loose unzip/dev build.";
+            }
+
+            msg += "\n\nWould you like to proceed with the following changes?\n\n";
+
+            if (hasOtherJSON)
+            {
+                foreach (var j in otherJSONs)
+                    msg += "Unregister: " + j + "\n";
+
+                msg += "\n";
+            }
+
+            if (!thisRegistered)
+            {
+                msg += "Register: " + myJSON + "\n";
+                if (Environment.Is64BitProcess)
+                    msg += "Register: " + Helpers.GetVulkanJSONPath(true) + "\n";
+                msg += "\n";
+            }
+
+            msg += "This is a one-off change to the registry, it won't be needed again unless the installation moves.";
+            
+            DialogResult res = MessageBox.Show(msg, caption, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+
+            if (res == DialogResult.Yes)
+            {
+                Helpers.RegisterVulkanLayer();
+
+                vulkanLayerWarn.Visible = !Helpers.CheckVulkanLayerRegistration();
+            }
         }
     }
 }

@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -96,6 +97,20 @@ namespace renderdoc
             }
 
             public ResourceId Shader;
+
+            [CustomMarshalAs(CustomUnmanagedType.UTF8TemplatedString)]
+            public string ShaderName;
+            public bool customShaderName;
+
+            [CustomMarshalAs(CustomUnmanagedType.UTF8TemplatedString)]
+            public string ProgramName;
+            public bool customProgramName;
+
+            public bool PipelineActive;
+            [CustomMarshalAs(CustomUnmanagedType.UTF8TemplatedString)]
+            public string PipelineName;
+            public bool customPipelineName;
+
             private IntPtr _ptr_ShaderDetails;
             [CustomMarshalAs(CustomUnmanagedType.Skip)]
             public ShaderReflection ShaderDetails;
@@ -132,6 +147,7 @@ namespace renderdoc
         {
             public ResourceId Resource;
             public UInt32 FirstSlice;
+            public UInt32 HighestMip;
             public ShaderResourceType ResType;
             [CustomMarshalAs(CustomUnmanagedType.FixedArray, FixedLength = 4)]
             public TextureSwizzle[] Swizzle;
@@ -379,10 +395,10 @@ namespace renderdoc
         [StructLayout(LayoutKind.Sequential)]
         public class Hints
         {
-            public Int32 Derivatives;
-            public Int32 LineSmooth;
-            public Int32 PolySmooth;
-            public Int32 TexCompression;
+            public QualityHint Derivatives;
+            public QualityHint LineSmooth;
+            public QualityHint PolySmooth;
+            public QualityHint TexCompression;
             public bool LineSmoothEnabled;
             public bool PolySmoothEnabled;
         };

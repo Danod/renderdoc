@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -393,6 +394,9 @@ namespace renderdocui.Windows
                 try
                 {
                     File.Copy(log.localpath, path, true);
+                    log.saved = true;
+                    m_Core.Config.AddRecentFile(m_Core.Config.RecentLogFiles, path, 10);
+                    m_Main.PopulateRecentFiles();
                 }
                 catch (System.Exception ex)
                 {

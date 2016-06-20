@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -115,6 +116,41 @@ namespace renderdocui.Code
             GetShortPathName(longpath, buffer, buffer.Length);
 
             return new string(buffer);
+        }
+
+        [DllImport("mpr.dll", CharSet = CharSet.Unicode)]
+        private static extern uint WNetGetUniversalNameW(string lpLocalPath, int dwInfoLevel, IntPtr lpBuffer, ref int lpBufferSize);
+        private const int UNIVERSAL_NAME_INFO_LEVEL = 0x00000001;
+        private const uint ERROR_MORE_DATA = 234;
+
+        public static string GetUniversalName(string localPath)
+        {
+            int size = 0;
+
+            IntPtr buf = (IntPtr)IntPtr.Size; // don't initialise to zero, as otherwise the call fails
+
+            uint ret = WNetGetUniversalNameW(localPath, UNIVERSAL_NAME_INFO_LEVEL, buf, ref size);
+
+            if (ret != ERROR_MORE_DATA)
+                return localPath;
+
+            buf = Marshal.AllocHGlobal(size);
+
+            ret = WNetGetUniversalNameW(localPath, UNIVERSAL_NAME_INFO_LEVEL, buf, ref size);
+
+            string universalPath = localPath;
+
+            if (ret == 0)
+            {
+                // buf points to a struct that contains just a string pointer, that points
+                // immediately after it. So we need to advance by one IntPtr to get to the
+                // actual string
+                universalPath = Marshal.PtrToStringUni(IntPtr.Add(buf, IntPtr.Size));
+            }
+
+            Marshal.FreeHGlobal(buf);
+
+            return universalPath;
         }
     }
 }

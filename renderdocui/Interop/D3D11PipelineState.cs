@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -62,6 +63,9 @@ namespace renderdoc
             private IntPtr _ptr_Bytecode;
             [CustomMarshalAs(CustomUnmanagedType.Skip)]
             public ShaderReflection Bytecode;
+            public bool customName;
+            [CustomMarshalAs(CustomUnmanagedType.UTF8TemplatedString)]
+            public string LayoutName;
 
             [StructLayout(LayoutKind.Sequential)]
             public class VertexBuffer
@@ -122,6 +126,7 @@ namespace renderdoc
 
                 public bool Structured;
                 public UInt32 BufferStructCount;
+                public UInt32 ElementSize;
 
                 // Buffer (SRV)
                 public UInt32 ElementOffset;
@@ -151,6 +156,11 @@ namespace renderdoc
             public class Sampler
             {
                 public ResourceId Samp;
+
+                [CustomMarshalAs(CustomUnmanagedType.UTF8TemplatedString)]
+                public string SamplerName;
+                public bool customSamplerName;
+
                 [CustomMarshalAs(CustomUnmanagedType.UTF8TemplatedString)]
                 public string AddressU, AddressV, AddressW;
                 [CustomMarshalAs(CustomUnmanagedType.FixedArray, FixedLength = 4)]

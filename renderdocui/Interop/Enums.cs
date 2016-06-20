@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -44,6 +45,8 @@ namespace renderdoc
         SNorm,
         UInt,
         SInt,
+        UScaled,
+        SScaled,
         Depth,
         Double,
     };
@@ -72,6 +75,20 @@ namespace renderdoc
         Texture3D,
         TextureCube,
         TextureCubeArray,
+    };
+
+    public enum ShaderBindType
+    {
+        Unknown = 0,
+        Sampler,
+        ImageSampler,
+        ReadOnlyImage,
+        ReadWriteImage,
+        ReadOnlyTBuffer,
+        ReadWriteTBuffer,
+        ReadOnlyBuffer,
+        ReadWriteBuffer,
+        InputAttachment,
     };
 
     public enum SystemAttribute
@@ -179,6 +196,7 @@ namespace renderdoc
         R5G5B5A1,
         R9G9B9E5,
         R4G4B4A4,
+        R4G4,
         D16S8,
         D24S8,
         D32S8,
@@ -186,10 +204,18 @@ namespace renderdoc
         YUV,
     };
 
+    public enum QualityHint
+    {
+      DontCare,
+      Nicest,
+      Fastest,
+    };
+
     public enum APIPipelineStateType
     {
         D3D11,
         OpenGL,
+        Vulkan,
     };
 
     public enum PrimitiveTopology
@@ -264,6 +290,7 @@ namespace renderdoc
     public enum ShaderStageType
     {
         Vertex = 0,
+        First = Vertex,
 
         Hull,
         Tess_Control = Hull,
@@ -277,6 +304,22 @@ namespace renderdoc
         Fragment = Pixel,
 
         Compute,
+
+        Count,
+    };
+
+    [Flags]
+    public enum ShaderStageBits
+    {
+        Vertex       = (1 << ShaderStageType.Vertex),
+        Hull         = (1 << ShaderStageType.Hull),
+        Tess_Control = (1 << ShaderStageType.Tess_Control),
+        Domain       = (1 << ShaderStageType.Domain),
+        Tess_Eval    = (1 << ShaderStageType.Tess_Eval),
+        Geometry     = (1 << ShaderStageType.Geometry),
+        Pixel        = (1 << ShaderStageType.Pixel),
+        Fragment     = (1 << ShaderStageType.Fragment),
+        Compute      = (1 << ShaderStageType.Compute),
     };
 
     public enum DebugMessageSource
@@ -347,6 +390,7 @@ namespace renderdoc
         PS_RWResource,
         CS_RWResource,
 
+        InputTarget,
     	ColourTarget,
     	DepthStencilTarget,
 
@@ -365,25 +409,29 @@ namespace renderdoc
     public enum DrawcallFlags
     {
         // types
-        Clear       = 0x01,
-        Drawcall    = 0x02,
-        Dispatch    = 0x04,
-        CmdList     = 0x08,
-        SetMarker   = 0x10,
-        PushMarker  = 0x20,
-        Present     = 0x40,
-        MultiDraw   = 0x80,
-        Copy        = 0x100,
-        Resolve     = 0x200,
-        GenMips     = 0x400,
+        Clear        = 0x0001,
+        Drawcall     = 0x0002,
+        Dispatch     = 0x0004,
+        CmdList      = 0x0008,
+        SetMarker    = 0x0010,
+        PushMarker   = 0x0020,
+        PopMarker    = 0x0040, // this is only for internal tracking use
+        Present      = 0x0080,
+        MultiDraw    = 0x0100,
+        Copy         = 0x0200,
+        Resolve      = 0x0400,
+        GenMips      = 0x0800,
+        PassBoundary = 0x1000,
 
         // flags
-        UseIBuffer  = 0x01000,
-        Instanced   = 0x02000,
-        Auto        = 0x04000,
-        Indirect    = 0x08000,
-        ClearColour = 0x10000,
-        ClearDepth  = 0x20000,
+        UseIBuffer        = 0x010000,
+        Instanced         = 0x020000,
+        Auto              = 0x040000,
+        Indirect          = 0x080000,
+        ClearColour       = 0x100000,
+        ClearDepthStencil = 0x200000,
+        BeginPass         = 0x400000,
+        EndPass           = 0x800000,
     };
 
     public enum SolidShadeMode
@@ -604,6 +652,7 @@ namespace renderdoc
                     case ResourceUsage.PS_RWResource: return "PS - UAV";
                     case ResourceUsage.CS_RWResource: return "CS - UAV";
 
+                    case ResourceUsage.InputTarget: return "Colour Input";
                     case ResourceUsage.ColourTarget: return "Rendertarget";
                     case ResourceUsage.DepthStencilTarget: return "Depthstencil";
 
@@ -618,8 +667,10 @@ namespace renderdoc
                     case ResourceUsage.CopyDst: return "Copy - Dest";
                 }
             }
-            else if (apitype == APIPipelineStateType.OpenGL)
+            else if (apitype == APIPipelineStateType.OpenGL || apitype == APIPipelineStateType.Vulkan)
             {
+                bool vk = (apitype == APIPipelineStateType.Vulkan);
+
                 switch (usage)
                 {
                     case ResourceUsage.VertexBuffer: return "Vertex Buffer";
@@ -648,15 +699,16 @@ namespace renderdoc
                     case ResourceUsage.PS_RWResource: return "PS - Image/SSBO";
                     case ResourceUsage.CS_RWResource: return "CS - Image/SSBO";
 
+                    case ResourceUsage.InputTarget: return "FBO Input";
                     case ResourceUsage.ColourTarget: return "FBO Colour";
                     case ResourceUsage.DepthStencilTarget: return "FBO Depthstencil";
 
                     case ResourceUsage.Clear: return "Clear";
 
                     case ResourceUsage.GenMips: return "Generate Mips";
-                    case ResourceUsage.Resolve: return "Framebuffer blit";
-                    case ResourceUsage.ResolveSrc: return "Framebuffer blit - Source";
-                    case ResourceUsage.ResolveDst: return "Framebuffer blit - Dest";
+                    case ResourceUsage.Resolve: return vk ? "Resolve" : "Framebuffer blit";
+                    case ResourceUsage.ResolveSrc: return vk ? "Resolve - Source" : "Framebuffer blit - Source";
+                    case ResourceUsage.ResolveDst: return vk ? "Resolve - Dest" : "Framebuffer blit - Dest";
                     case ResourceUsage.Copy: return "Copy";
                     case ResourceUsage.CopySrc: return "Copy - Source";
                     case ResourceUsage.CopyDst: return "Copy - Dest";
@@ -680,7 +732,7 @@ namespace renderdoc
                     case ShaderStageType.Compute: return "Compute";
                 }
             }
-            else if(apitype == APIPipelineStateType.OpenGL)
+            else if (apitype == APIPipelineStateType.OpenGL || apitype == APIPipelineStateType.Vulkan)
             {
                 switch (stage)
                 {
@@ -694,36 +746,6 @@ namespace renderdoc
             }
 
             return stage.ToString();
-        }
-
-        public static string Abbrev(this ShaderStageType stage, APIPipelineStateType apitype)
-        {
-            if (apitype == APIPipelineStateType.D3D11)
-            {
-                switch (stage)
-                {
-                    case ShaderStageType.Vertex: return "VS";
-                    case ShaderStageType.Hull: return "HS";
-                    case ShaderStageType.Domain: return "DS";
-                    case ShaderStageType.Geometry: return "GS";
-                    case ShaderStageType.Pixel: return "PS";
-                    case ShaderStageType.Compute: return "CS";
-                }
-            }
-            else if (apitype == APIPipelineStateType.OpenGL)
-            {
-                switch (stage)
-                {
-                    case ShaderStageType.Vertex: return "VS";
-                    case ShaderStageType.Tess_Control: return "TCS";
-                    case ShaderStageType.Tess_Eval: return "TES";
-                    case ShaderStageType.Geometry: return "GS";
-                    case ShaderStageType.Fragment: return "FS";
-                    case ShaderStageType.Compute: return "CS";
-                }
-            }
-
-            return "?S";
         }
 
         public static string Str(this SystemAttribute systemValue)
@@ -758,6 +780,25 @@ namespace renderdoc
             }
 
             return "SV_Unknown";
+        }
+
+        public static string Str(this ShaderBindType bindType)
+        {
+            switch (bindType)
+            {
+                case ShaderBindType.Sampler:          return "Sampler";
+                case ShaderBindType.ImageSampler:     return "Image&Sampler";
+                case ShaderBindType.ReadOnlyImage:    return "Image";
+                case ShaderBindType.ReadWriteImage:   return "RW Image";
+                case ShaderBindType.ReadOnlyTBuffer:  return "RW TBuffer";
+                case ShaderBindType.ReadWriteTBuffer: return "TBuffer";
+                case ShaderBindType.ReadOnlyBuffer:   return "Buffer";
+                case ShaderBindType.ReadWriteBuffer:  return "RW Buffer";
+                case ShaderBindType.InputAttachment:  return "Input";
+                default: break;
+            }
+
+            return "Unknown";
         }
     }
 }

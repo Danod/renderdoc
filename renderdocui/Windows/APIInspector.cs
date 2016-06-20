@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -83,8 +84,8 @@ namespace renderdocui.Windows
             apiEvents.BeginUpdate();
             apiEvents.Nodes.Clear();
 
-            Regex rgx = new Regex("^\\s*[{}]?");
-            string replacement = "";
+            Regex rgxopen = new Regex("^\\s*{");
+            Regex rgxclose = new Regex("^\\s*}");
 
             FetchDrawcall draw = m_Core.CurDrawcall;
 
@@ -99,19 +100,32 @@ namespace renderdocui.Windows
 
                     string[] lines = ev.eventDesc.Split(new string[] { "\r\n", "\n" }, StringSplitOptions.None);
 
-                    TreelistView.Node node = apiEvents.Nodes.Add(new TreelistView.Node(new object[] { ev.eventID, lines[0] }));
+                    TreelistView.Node root = new TreelistView.Node(new object[] { ev.eventID, lines[0] });
 
-                    for (int i = 1; i < lines.Length; i++)
+                    int i=1;
+
+                    if (i < lines.Length && lines[i].Trim() == "{")
+                        i++;
+
+                    List<TreelistView.Node> nodestack = new List<TreelistView.Node>();
+                    nodestack.Add(root);
+
+                    for (; i < lines.Length; i++)
                     {
-                        string l = rgx.Replace(lines[i], replacement);
-                        if (l.Length > 0)
-                            node.Nodes.Add(new TreelistView.Node(new object[] { "", l }));
+                        if (rgxopen.IsMatch(lines[i]))
+                            nodestack.Add(nodestack.Last().Nodes.LastNode);
+                        else if (rgxclose.IsMatch(lines[i]))
+                            nodestack.RemoveAt(nodestack.Count - 1);
+                        else if(lines[i].Trim().Length > 0 && nodestack.Count > 0)
+                            nodestack.Last().Nodes.Add(new TreelistView.Node(new object[] { "", lines[i].Trim() }));
                     }
 
                     if (ev.eventID == draw.eventID)
-                        node.Bold = true;
+                        root.Bold = true;
 
-                    node.Tag = (object)ev;
+                    root.Tag = (object)ev;
+
+                    apiEvents.Nodes.Add(root);
                 }
 
                 if (apiEvents.Nodes.Count > 0)
@@ -121,7 +135,7 @@ namespace renderdocui.Windows
             apiEvents.EndUpdate();
         }
 
-        public void OnEventSelected(UInt32 frameID, UInt32 eventID)
+        public void OnEventSelected(UInt32 eventID)
         {
             FillAPIView();
 
@@ -214,9 +228,6 @@ namespace renderdocui.Windows
 
         private void APIEvents_Shown(object sender, EventArgs e)
         {
-            if (m_Core.LogLoaded)
-                OnLogfileLoaded();
-
             panelSplitter.Collapsed = true;
         }
 

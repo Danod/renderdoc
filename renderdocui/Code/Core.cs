@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -62,19 +63,19 @@ namespace renderdocui.Code
 
         private string m_LogFile = "";
 
-        private UInt32 m_FrameID = 0;
         private UInt32 m_EventID = 0;
         private UInt32 m_DeferredEvent = 0;
 
         private APIProperties m_APIProperties = null;
 
-        private FetchFrameInfo[] m_FrameInfo = null;
-        private FetchDrawcall[][] m_DrawCalls = null;
+        private FetchFrameInfo m_FrameInfo = null;
+        private FetchDrawcall[] m_DrawCalls = null;
         private FetchBuffer[] m_Buffers = null;
         private FetchTexture[] m_Textures = null;
 
         private D3D11PipelineState m_D3D11PipelineState = null;
         private GLPipelineState m_GLPipelineState = null;
+        private VulkanPipelineState m_VulkanPipelineState = null;
         private CommonPipelineState m_PipelineState = new CommonPipelineState();
 
         private List<ILogViewerForm> m_LogViewers = new List<ILogViewerForm>();
@@ -87,6 +88,7 @@ namespace renderdocui.Code
         private TimelineBar m_TimelineBar = null;
         private TextureViewer m_TextureViewer = null;
         private PipelineStateViewer m_PipelineStateViewer = null;
+        private StatisticsViewer m_StatisticsViewer = null;
 
         #endregion
 
@@ -114,20 +116,40 @@ namespace renderdocui.Code
         public bool LogLoading { get { return m_LogLoadingInProgress; } }
         public string LogFileName { get { return m_LogFile; } set { if (LogLoaded) m_LogFile = value; } }
 
-        public FetchFrameInfo[] FrameInfo { get { return m_FrameInfo; } }
+        public FetchFrameInfo FrameInfo { get { return m_FrameInfo; } }
 
         public APIProperties APIProps { get { return m_APIProperties; } }
 
-        // typically 0 right now as we haven't supported multiple frames in logs for a loooong time.
-        public UInt32 CurFrame { get { return m_FrameID; } }
         public UInt32 CurEvent { get { return m_DeferredEvent > 0 ? m_DeferredEvent : m_EventID; } }
 
-        public FetchDrawcall[] CurDrawcalls { get { return GetDrawcalls(CurFrame); } }
+        public FetchDrawcall[] CurDrawcalls { get { return GetDrawcalls(); } }
 
-        public FetchDrawcall CurDrawcall { get { return GetDrawcall(CurFrame, CurEvent); } }
+        public FetchDrawcall CurDrawcall { get { return GetDrawcall(CurEvent); } }
 
         public FetchTexture[] CurTextures { get { return m_Textures; } }
         public FetchBuffer[] CurBuffers { get { return m_Buffers; } }
+
+        public FetchTexture GetTexture(ResourceId id)
+        {
+            if (id == ResourceId.Null) return null;
+
+            for (int t = 0; t < m_Textures.Length; t++)
+                if (m_Textures[t].ID == id)
+                    return m_Textures[t];
+
+            return null;
+        }
+
+        public FetchBuffer GetBuffer(ResourceId id)
+        {
+            if (id == ResourceId.Null) return null;
+
+            for (int b = 0; b < m_Buffers.Length; b++)
+                if (m_Buffers[b].ID == id)
+                    return m_Buffers[b];
+
+            return null;
+        }
 
         public List<DebugMessage> DebugMessages = new List<DebugMessage>();
         public int UnreadMessageCount = 0;
@@ -151,6 +173,7 @@ namespace renderdocui.Code
         // direct access (note that only one of these will be valid for a log, check APIProps.pipelineType)
         public D3D11PipelineState CurD3D11PipelineState { get { return m_D3D11PipelineState; } }
         public GLPipelineState CurGLPipelineState { get { return m_GLPipelineState; } }
+        public VulkanPipelineState CurVulkanPipelineState { get { return m_VulkanPipelineState; } }
         public CommonPipelineState CurPipelineState { get { return m_PipelineState; } }
 
         #endregion
@@ -269,7 +292,7 @@ namespace renderdocui.Code
 
             foreach (var d in draws)
             {
-                ret |= (d.flags & (DrawcallFlags.PushMarker | DrawcallFlags.SetMarker)) > 0 && (d.flags & DrawcallFlags.CmdList) == 0;
+                ret |= (d.flags & DrawcallFlags.PushMarker) > 0 && (d.flags & DrawcallFlags.CmdList) == 0;
                 ret |= ContainsMarker(d.children);
             }
 
@@ -279,7 +302,7 @@ namespace renderdocui.Code
         // if a log doesn't contain any markers specified at all by the user, then we can
         // fake some up by determining batches of draws that are similar and giving them a
         // pass number
-        private FetchDrawcall[] FakeProfileMarkers(int frameID, FetchDrawcall[] draws)
+        private FetchDrawcall[] FakeProfileMarkers(FetchDrawcall[] draws)
         {
             if (ContainsMarker(draws))
                 return draws;
@@ -291,28 +314,34 @@ namespace renderdocui.Code
             int passID = 1;
 
             int start = 0;
-
-            int counter = 1;
+            int refdraw = 0;
 
             for (int i = 1; i < draws.Length; i++)
             {
-                if (PassEquivalent(draws[i], draws[start]))
+                if ((draws[refdraw].flags & (DrawcallFlags.Copy | DrawcallFlags.Resolve | DrawcallFlags.SetMarker)) > 0)
+                {
+                    refdraw = i;
+                    continue;
+                }
+
+                if ((draws[i].flags & (DrawcallFlags.Copy | DrawcallFlags.Resolve | DrawcallFlags.SetMarker)) > 0)
+                    continue;
+
+                if (PassEquivalent(draws[i], draws[refdraw]))
                     continue;
 
                 int end = i-1;
 
                 if (end - start < 2 ||
-                    draws[i].children.Length > 0 || draws[start].children.Length > 0 ||
-                    draws[i].context != m_FrameInfo[frameID].immContextId ||
-                    draws[start].context != m_FrameInfo[frameID].immContextId)
+                    draws[i].children.Length > 0 || draws[refdraw].children.Length > 0 ||
+                    draws[i].context != m_FrameInfo.immContextId ||
+                    draws[refdraw].context != m_FrameInfo.immContextId)
                 {
                     for (int j = start; j <= end; j++)
-                    {
                         ret.Add(draws[j]);
-                        counter++;
-                    }
 
                     start = i;
+                    refdraw = i;
                     continue;
                 }
 
@@ -331,8 +360,9 @@ namespace renderdocui.Code
 
                 FetchDrawcall mark = new FetchDrawcall();
                 
-                mark.eventID = draws[end].eventID;
-                mark.drawcallID = draws[end].drawcallID;
+                mark.eventID = draws[start].eventID;
+                mark.drawcallID = draws[start].drawcallID;
+                mark.markerColour = new float[] { 0.0f, 0.0f, 0.0f, 0.0f };
 
                 mark.context = draws[end].context;
                 mark.flags = DrawcallFlags.PushMarker;
@@ -341,12 +371,13 @@ namespace renderdocui.Code
 
                 mark.name = "Guessed Pass";
 
+                minOutCount = Math.Max(1, minOutCount);
 
-                if((draws[end].flags & DrawcallFlags.Dispatch) != 0)
+                if ((draws[refdraw].flags & DrawcallFlags.Dispatch) != 0)
                     mark.name = String.Format("Compute Pass #{0}", computepassID++);
                 else if (maxOutCount == 0)
                     mark.name = String.Format("Depth-only Pass #{0}", depthpassID++);
-                else if(minOutCount == maxOutCount)
+                else if (minOutCount == maxOutCount)
                     mark.name = String.Format("Colour Pass #{0} ({1} Targets{2})", passID++, minOutCount, draws[end].depthOut == ResourceId.Null ? "" : " + Depth");
                 else
                     mark.name = String.Format("Colour Pass #{0} ({1}-{2} Targets{3})", passID++, minOutCount, maxOutCount, draws[end].depthOut == ResourceId.Null ? "" : " + Depth");
@@ -362,13 +393,61 @@ namespace renderdocui.Code
                 ret.Add(mark);
 
                 start = i;
-                counter++;
+                refdraw = i;
             }
 
             if (start < draws.Length)
-                ret.Add(draws[start]);
+            {
+                for (int j = start; j < draws.Length; j++)
+                    ret.Add(draws[j]);
+            }
 
             return ret.ToArray();
+        }
+
+        // because some engines (*cough*unreal*cough*) provide a valid marker colour of
+        // opaque black for every marker, instead of transparent black (i.e. just 0) we
+        // want to check for that case and remove the colors, instead of displaying all
+        // the markers as black which is not what's intended.
+        //
+        // Valid marker colors = has at least one color somewhere that isn't (0.0, 0.0, 0.0, 1.0)
+        //                       or (0.0, 0.0, 0.0, 0.0)
+        //
+        // This will fail if no marker colors are set anyway, but then removing them is
+        // harmless.
+        private bool HasValidMarkerColors(FetchDrawcall[] draws)
+        {
+            if (draws.Length == 0)
+                return false;
+
+            foreach (var d in draws)
+            {
+                if (d.markerColour[0] != 0.0f ||
+                     d.markerColour[1] != 0.0f ||
+                     d.markerColour[2] != 0.0f ||
+                     (d.markerColour[3] != 1.0f && d.markerColour[3] != 0.0f))
+                {
+                    return true;
+                }
+
+                if (HasValidMarkerColors(d.children))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private void RemoveMarkerColors(FetchDrawcall[] draws)
+        {
+            for (int i = 0; i < draws.Length; i++)
+            {
+                draws[i].markerColour[0] = 0.0f;
+                draws[i].markerColour[1] = 0.0f;
+                draws[i].markerColour[2] = 0.0f;
+                draws[i].markerColour[3] = 0.0f;
+
+                RemoveMarkerColors(draws[i].children);
+            }
         }
 
         // loading a local log, no remote replay
@@ -470,7 +549,6 @@ namespace renderdocui.Code
                     m_Config.Serialize(Core.ConfigFilename);
             }
 
-            m_FrameID = 0;
             m_EventID = 0;
 
             m_FrameInfo = null;
@@ -485,18 +563,18 @@ namespace renderdocui.Code
 
                 postloadProgress = 0.2f;
 
-                m_DrawCalls = new FetchDrawcall[m_FrameInfo.Length][];
+                m_DrawCalls = FakeProfileMarkers(r.GetDrawcalls());
+
+                bool valid = HasValidMarkerColors(m_DrawCalls);
+
+                if (!valid)
+                    RemoveMarkerColors(m_DrawCalls);
 
                 postloadProgress = 0.4f;
 
-                for (int i = 0; i < m_FrameInfo.Length; i++)
-                    m_DrawCalls[i] = FakeProfileMarkers(i, r.GetDrawcalls((UInt32)i));
-
-                postloadProgress = 0.7f;
-
                 m_Buffers = r.GetBuffers();
 
-                postloadProgress = 0.8f;
+                postloadProgress = 0.7f;
                 var texs = new List<FetchTexture>(r.GetTextures());
                 m_Textures = texs.OrderBy(o => o.name).ToArray();
 
@@ -504,10 +582,11 @@ namespace renderdocui.Code
 
                 m_D3D11PipelineState = r.GetD3D11PipelineState();
                 m_GLPipelineState = r.GetGLPipelineState();
-                m_PipelineState.SetStates(m_APIProperties, m_D3D11PipelineState, m_GLPipelineState);
+                m_VulkanPipelineState = r.GetVulkanPipelineState();
+                m_PipelineState.SetStates(m_APIProperties, m_D3D11PipelineState, m_GLPipelineState, m_VulkanPipelineState);
 
                 UnreadMessageCount = 0;
-                AddMessages(m_FrameInfo[0].debugMessages);
+                AddMessages(m_FrameInfo.debugMessages);
 
                 postloadProgress = 1.0f;
             });
@@ -580,10 +659,10 @@ namespace renderdocui.Code
             m_Renderer.Invoke((ReplayRenderer r) =>
             {
                 r.FileChanged();
-                r.SetFrameEvent(m_FrameID, m_EventID > 0 ? m_EventID-1 : 1);
+                r.SetFrameEvent(m_EventID > 0 ? m_EventID-1 : 1, true);
             });
 
-            SetEventID(null, CurFrame, CurEvent);
+            SetEventID(null, CurEvent);
         }
 
         public void CloseLogfile()
@@ -603,7 +682,8 @@ namespace renderdocui.Code
 
             m_D3D11PipelineState = null;
             m_GLPipelineState = null;
-            m_PipelineState.SetStates(null, null, null);
+            m_VulkanPipelineState = null;
+            m_PipelineState.SetStates(null, null, null, null);
 
             DebugMessages.Clear();
             UnreadMessageCount = 0;
@@ -644,10 +724,9 @@ namespace renderdocui.Code
 
         #region Log drawcalls
 
-        public FetchDrawcall[] GetDrawcalls(UInt32 frameIdx)
+        public FetchDrawcall[] GetDrawcalls()
         {
-            if (m_DrawCalls == null) return null;
-            return m_DrawCalls[frameIdx];
+            return m_DrawCalls;
         }
 
         private FetchDrawcall GetDrawcall(FetchDrawcall[] draws, UInt32 eventID)
@@ -667,12 +746,12 @@ namespace renderdocui.Code
             return null;
         }
 
-        public FetchDrawcall GetDrawcall(UInt32 frameID, UInt32 eventID)
+        public FetchDrawcall GetDrawcall(UInt32 eventID)
         {
-            if (frameID < 0 || m_DrawCalls == null || frameID >= m_DrawCalls.Length)
+            if (m_DrawCalls == null)
                 return null;
 
-            return GetDrawcall(m_DrawCalls[frameID], eventID);
+            return GetDrawcall(m_DrawCalls, eventID);
         }
 
         #endregion
@@ -772,7 +851,18 @@ namespace renderdocui.Code
             return m_TimelineBar;
         }
 
-        public void AddLogProgressListener(ILogLoadProgressListener p)
+        public StatisticsViewer GetStatisticsViewer()
+        {
+            if (m_StatisticsViewer == null || m_StatisticsViewer.IsDisposed)
+            {
+                m_StatisticsViewer = new StatisticsViewer(this);
+                AddLogViewer(m_StatisticsViewer);
+            }
+
+            return m_StatisticsViewer;
+        }
+
+		public void AddLogProgressListener(ILogLoadProgressListener p)
         {
             m_ProgressListeners.Add(p);
         }
@@ -784,7 +874,7 @@ namespace renderdocui.Code
             if (LogLoaded)
             {
                 f.OnLogfileLoaded();
-                f.OnEventSelected(CurFrame, CurEvent);
+                f.OnEventSelected(CurEvent);
             }
         }
 
@@ -799,20 +889,20 @@ namespace renderdocui.Code
 
         // setting a context filter allows replaying of deferred events. You can set the deferred
         // events to replay in a context, after replaying up to a given event on the main thread
-        public void SetContextFilter(ILogViewerForm exclude, UInt32 frameID, UInt32 eventID,
+        public void SetContextFilter(ILogViewerForm exclude, UInt32 eventID,
                                      ResourceId ctx, UInt32 firstDeferred, UInt32 lastDeferred)
         {
-            m_FrameID = frameID;
             m_EventID = eventID;
 
             m_DeferredEvent = lastDeferred;
 
             m_Renderer.Invoke((ReplayRenderer r) => { r.SetContextFilter(ctx, firstDeferred, lastDeferred); });
             m_Renderer.Invoke((ReplayRenderer r) => {
-                r.SetFrameEvent(m_FrameID, m_EventID);
+                r.SetFrameEvent(m_EventID, true);
                 m_D3D11PipelineState = r.GetD3D11PipelineState();
                 m_GLPipelineState = r.GetGLPipelineState();
-                m_PipelineState.SetStates(m_APIProperties, m_D3D11PipelineState, m_GLPipelineState);
+                m_VulkanPipelineState = r.GetVulkanPipelineState();
+                m_PipelineState.SetStates(m_APIProperties, m_D3D11PipelineState, m_GLPipelineState, m_VulkanPipelineState);
             });
 
             foreach (var logviewer in m_LogViewers)
@@ -822,15 +912,24 @@ namespace renderdocui.Code
 
                 Control c = (Control)logviewer;
                 if (c.InvokeRequired)
-                    c.BeginInvoke(new Action(() => logviewer.OnEventSelected(frameID, eventID)));
+                    c.BeginInvoke(new Action(() => logviewer.OnEventSelected(eventID)));
                 else
-                    logviewer.OnEventSelected(frameID, eventID);
+                    logviewer.OnEventSelected(eventID);
             }
         }
 
-        public void SetEventID(ILogViewerForm exclude, UInt32 frameID, UInt32 eventID)
+        public void RefreshStatus()
         {
-            m_FrameID = frameID;
+            SetEventID(null, m_EventID, true);
+        }
+
+        public void SetEventID(ILogViewerForm exclude, UInt32 eventID)
+        {
+            SetEventID(exclude, eventID, false);
+        }
+
+        private void SetEventID(ILogViewerForm exclude, UInt32 eventID, bool force)
+        {
             m_EventID = eventID;
 
             m_DeferredEvent = 0;
@@ -838,10 +937,11 @@ namespace renderdocui.Code
             m_Renderer.Invoke((ReplayRenderer r) => { r.SetContextFilter(ResourceId.Null, 0, 0); });
             m_Renderer.Invoke((ReplayRenderer r) =>
             {
-                r.SetFrameEvent(m_FrameID, m_EventID);
+                r.SetFrameEvent(m_EventID, force);
                 m_D3D11PipelineState = r.GetD3D11PipelineState();
                 m_GLPipelineState = r.GetGLPipelineState();
-                m_PipelineState.SetStates(m_APIProperties, m_D3D11PipelineState, m_GLPipelineState);
+                m_VulkanPipelineState = r.GetVulkanPipelineState();
+                m_PipelineState.SetStates(m_APIProperties, m_D3D11PipelineState, m_GLPipelineState, m_VulkanPipelineState);
             });
 
             foreach (var logviewer in m_LogViewers)
@@ -851,9 +951,9 @@ namespace renderdocui.Code
 
                 Control c = (Control)logviewer;
                 if (c.InvokeRequired)
-                    c.Invoke(new Action(() => logviewer.OnEventSelected(frameID, eventID)));
+                    c.Invoke(new Action(() => logviewer.OnEventSelected(eventID)));
                 else
-                    logviewer.OnEventSelected(frameID, eventID);
+                    logviewer.OnEventSelected(eventID);
             }
         }
 

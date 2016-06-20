@@ -32,11 +32,11 @@ INCLUDEPATH += $$_PRO_FILE_PWD_/3rdparty/flowlayout
 win32 {
 
 	!contains(QMAKE_TARGET.arch, x86_64) {
-		Debug:DESTDIR = $$_PRO_FILE_PWD_/../Win32/Profile
+		Debug:DESTDIR = $$_PRO_FILE_PWD_/../Win32/Development
 		Release:DESTDIR = $$_PRO_FILE_PWD_/../Win32/Release
 
 	} else {
-		Debug:DESTDIR = $$_PRO_FILE_PWD_/../x64/Profile
+		Debug:DESTDIR = $$_PRO_FILE_PWD_/../x64/Development
 		Release:DESTDIR = $$_PRO_FILE_PWD_/../x64/Release
 	}
 
@@ -44,25 +44,28 @@ win32 {
 	LIBS += $$DESTDIR/renderdoc.lib
 
 	QMAKE_CXXFLAGS_WARN_ON -= -w34100 
+	DEFINES += RENDERDOC_PLATFORM_WIN32
 
 } else {
-
-	DESTDIR = $$_PRO_FILE_PWD_/../bin
+	isEmpty(DESTDIR) {
+		DESTDIR = $$_PRO_FILE_PWD_/../bin
+	}
 
 	# Link against the core library
-	LIBS += -L$$_PRO_FILE_PWD_/../renderdoc -lrenderdoc
+	LIBS += -L$$DESTDIR -lrenderdoc
 	QMAKE_LFLAGS += '-Wl,-rpath,\'\$$ORIGIN\''
 
-	QMAKE_CXXFLAGS += -std=c++11 -Wno-unused-parameter
+	QMAKE_CXXFLAGS += -std=c++11 -Wno-unused-parameter -Wno-reorder
 
 	QT += x11extras
-
+	DEFINES += RENDERDOC_PLATFORM_POSIX RENDERDOC_PLATFORM_LINUX
 }
 
 SOURCES += Code/main.cpp \
     Windows/MainWindow.cpp \
     Windows/EventBrowser.cpp \
     Windows/TextureViewer.cpp \
+    Windows/AboutDialog.cpp \
     Widgets/CustomPaintWidget.cpp \
     3rdparty/toolwindowmanager/ToolWindowManager.cpp \
     3rdparty/toolwindowmanager/ToolWindowManagerArea.cpp \
@@ -75,6 +78,7 @@ SOURCES += Code/main.cpp \
 HEADERS  += Windows/MainWindow.h \
     Windows/EventBrowser.h \
     Windows/TextureViewer.h \
+    Windows/AboutDialog.h \
     Widgets/CustomPaintWidget.h \
     3rdparty/toolwindowmanager/ToolWindowManager.h \
     3rdparty/toolwindowmanager/ToolWindowManagerArea.h \
@@ -86,7 +90,8 @@ HEADERS  += Windows/MainWindow.h \
 
 FORMS    += Windows/MainWindow.ui \
     Windows/EventBrowser.ui \
-    Windows/TextureViewer.ui
+    Windows/TextureViewer.ui \
+    Windows/AboutDialog.ui
 
 RESOURCES += \
     resources.qrc

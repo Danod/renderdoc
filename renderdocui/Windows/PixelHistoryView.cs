@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -328,7 +329,7 @@ namespace renderdocui.Windows
                 (texture.format.special && texture.format.specialFormat == SpecialFormat.S8))
                 depth = true;
 
-            var drawcall = m_Core.GetDrawcall(m_Core.CurFrame, mods[0].eventID);
+            var drawcall = m_Core.GetDrawcall(mods[0].eventID);
             if (drawcall == null) return null;
 
             string name = "";
@@ -455,7 +456,7 @@ namespace renderdocui.Windows
         {
         }
 
-        public void OnEventSelected(UInt32 frameID, UInt32 eventID)
+        public void OnEventSelected(UInt32 eventID)
         {
         }
 
@@ -463,7 +464,7 @@ namespace renderdocui.Windows
         {
             if (node.Tag is EventTag)
             {
-                m_Core.SetEventID(this, m_Core.CurFrame, ((EventTag)node.Tag).EID);
+                m_Core.SetEventID(this, ((EventTag)node.Tag).EID);
             }
         }
 
@@ -501,7 +502,7 @@ namespace renderdocui.Windows
             {
                 EventTag tag = (EventTag)node.Tag;
 
-                m_Core.SetEventID(this, m_Core.CurFrame, tag.EID);
+                m_Core.SetEventID(this, tag.EID);
 
                 ShaderDebugTrace trace = null;
 

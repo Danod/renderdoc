@@ -5,7 +5,7 @@
 
     <Package Id='*' Keywords='Installer' Description="Installer for RenderDoc"
       Comments='RenderDoc Homepage is http://renderdoc.org/' Manufacturer='Baldur Karlsson'
-      InstallerVersion='100' Languages='1033' Compressed='yes' SummaryCodepage='1252' />
+      InstallerVersion='300' Languages='1033' Compressed='yes' SummaryCodepage='1252' />
 
     <UI> 
        <Error Id="25000">Please use the 64-bit installer</Error> 
@@ -27,7 +27,12 @@
                       IncludeMaximum="yes"
                       Maximum="$(env.RENDERDOC_VERSION)"
                       Property="OLDERVERSIONBEINGUPGRADED" />
+      <UpgradeVersion OnlyDetect="yes" Property="NEWERVERSIONDETECTED" Minimum="$(env.RENDERDOC_VERSION)" IncludeMinimum="no" />
     </Upgrade>
+
+    <Condition Message="A later version of [ProductName] is already installed"> 
+      NOT NEWERVERSIONDETECTED
+    </Condition> 
 
     <Media Id='1' Cabinet='renderdoc.cab' EmbedCab='yes' DiskPrompt="CD-ROM #1" />
     <Property Id='DiskPrompt' Value="RenderDoc Installation [1]" />
@@ -77,6 +82,7 @@
 
           <Component Id='RenderDocCPP' Guid='2E6F718F-8BCC-4D41-9688-E99CF2F6B303'>
             <File Id='RenderDocCPP' Name='renderdoc.dll' DiskId='1' Source='dist/Release32/renderdoc.dll' KeyPath='yes' />
+            <File Id='RenderDocJSON' Name='renderdoc.json' DiskId='1' Source='dist/Release32/renderdoc.json' />
             <File Id='D3DCompiler47' Name='d3dcompiler_47.dll' DiskId='1' Source='dist/Release32/d3dcompiler_47.dll' />
             <File Id='RenderDocSHIM' Name='renderdocshim32.dll' DiskId='1' Source='dist/Release32/renderdocshim32.dll' />
 
@@ -90,6 +96,12 @@
               Key="Software\Classes\CLSID\{5D6BF029-A6BA-417A-8523-120492B1DCE3}\InprocServer32" 
               Value='[#RenderDocCPP]' 
               Type="expandable" />
+
+            <RegistryValue Root="HKLM" Id="RDCVulkanImplicitLayer" Action="write"
+              Key="Software\Khronos\Vulkan\ImplicitLayers" 
+              Name='[#RenderDocJSON]'
+              Value='0'
+              Type="integer" />
 
           </Component>
 
@@ -234,6 +246,10 @@
 
     </Directory>
 
+    <DirectoryRef Id="TARGETDIR">
+      <Merge Id="VCRedist32" DiskId="1" Language="0" SourceFile="C:\Program Files (x86)\Common Files\Merge Modules\Microsoft_VC100_CRT_x86.msm"/>
+    </DirectoryRef>
+
     <Feature Id='Complete' Title='RenderDoc' Description='Everything included.' AllowAdvertise='no' Absent='disallow' Display='expand' Level='1' ConfigurableDirectory='INSTALLDIR'>
       <Feature Id='MainProgram' Title='Program' Description='The main executable with everything needed to capture and replay.' AllowAdvertise='no' Absent='disallow' Level='1'>
         <ComponentRef Id='RenderDocUI' />
@@ -255,6 +271,10 @@
         <ComponentRef Id='ImageOpenWith' />
       </Feature>
 
+      <Feature Id="VCRedist32" Title="Visual C++ 2010 Runtime SP1" AllowAdvertise="no" Display="hidden" Level="1">
+        <MergeRef Id="VCRedist32"/>
+      </Feature>
+
       <Feature Id='Docs' Title='Documentation' Description='CHM file with local help.' Level='1'>
         <ComponentRef Id='Documentation' />
       </Feature>
@@ -271,6 +291,9 @@
     <UIRef Id="WixUI_ErrorProgressText" />
 
     <WixVariable Id="WixUILicenseRtf" Value="installer/LICENSE.rtf" />
+
+    <WixVariable Id="WixUIBannerBmp" Value="installer/bannrbmp.bmp" />
+    <WixVariable Id="WixUIDialogBmp" Value="installer/dlgbmp.bmp" />
 
     <Icon Id="chm.ico"  SourceFile="installer/chm.ico" />
     <Icon Id="icon.ico" SourceFile="renderdocui/Resources/icon.ico" />

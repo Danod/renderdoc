@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -59,17 +60,23 @@ namespace renderdocui.Windows
 
         private int m_HighWaterStatusLength = 0;
 
-        public enum FollowType { OutputColour, OutputDepth, ReadWriteRes, InputResource }
+        public enum FollowType { OutputColour, OutputDepth, ReadWrite, ReadOnly }
         struct Following
         {
             public FollowType Type;
+            public ShaderStageType Stage;
             public int index;
+            public int arrayEl;
 
-            public Following(FollowType t, int i) { Type = t; index = i; }
+            public static Following Default = new Following(FollowType.OutputColour, ShaderStageType.Pixel, 0, 0);
+
+            public Following(FollowType t, ShaderStageType s, int i, int a) { Type = t; Stage = s; index = i; arrayEl = a; }
 
             public override int GetHashCode()
             {
-                return Type.GetHashCode() + index.GetHashCode();
+                return Type.GetHashCode() +
+                    Stage.GetHashCode() +
+                    index.GetHashCode();
             }
             public override bool Equals(object obj)
             {
@@ -77,15 +84,16 @@ namespace renderdocui.Windows
             }
             public static bool operator ==(Following s1, Following s2)
             {
-                return s1.Type == s2.Type && s1.index == s2.index;
+                return s1.Type == s2.Type &&
+                    s1.Stage == s2.Stage &&
+                    s1.index == s2.index;
             }
             public static bool operator !=(Following s1, Following s2)
             {
                 return !(s1 == s2);
             }
 
-            // todo, implement these better for GL :(
-            private static void GetDrawContext(Core core, out bool copy, out bool compute)
+            public static void GetDrawContext(Core core, out bool copy, out bool compute)
             {
                 var curDraw = core.CurDrawcall;
                 copy = curDraw != null && (curDraw.flags & (DrawcallFlags.Copy | DrawcallFlags.Resolve)) != 0;
@@ -99,53 +107,10 @@ namespace renderdocui.Windows
                 bool copy, compute;
                 GetDrawContext(core, out copy, out compute);
 
-                // TODO find a way (without copy-pasting tons of code)
-                // to duplicate the logic of GetResourceId() but return
-                // different information
                 if (copy || compute)
                     return -1;
 
-                if (core.APIProps.pipelineType == APIPipelineStateType.D3D11)
-                {
-                    D3D11PipelineState.ShaderStage.ResourceView view = null;
-
-                    if (Type == FollowType.OutputColour)
-                    {
-                        view = core.CurD3D11PipelineState.m_OM.RenderTargets[index];
-                    }
-                    else if (Type == FollowType.OutputDepth)
-                    {
-                        view = core.CurD3D11PipelineState.m_OM.DepthTarget;
-                    }
-                    else if (Type == FollowType.ReadWriteRes)
-                    {
-                        if (index >= core.CurD3D11PipelineState.m_OM.UAVStartSlot)
-                            view = core.CurD3D11PipelineState.m_OM.UAVs[index];
-                    }
-                    else if (Type == FollowType.InputResource)
-                    {
-                        view = core.CurD3D11PipelineState.m_PS.SRVs[index];
-                    }
-
-                    return view != null ? (int)view.HighestMip : -1;
-                }
-                else
-                {
-                    if (Type == FollowType.OutputColour)
-                    {
-                        return (int)core.CurGLPipelineState.m_FB.m_DrawFBO.Color[index].Mip;
-                    }
-                    else if (Type == FollowType.OutputDepth)
-                    {
-                        return (int)core.CurGLPipelineState.m_FB.m_DrawFBO.Depth.Mip;
-                    }
-                    else if (Type == FollowType.ReadWriteRes)
-                    {
-                        return (int)core.CurGLPipelineState.Images[index].Level;
-                    }
-                }
-
-                return -1;
+                return GetBoundResource(core, arrayEl).HighestMip;
             }
 
             public int GetFirstArraySlice(Core core)
@@ -154,148 +119,208 @@ namespace renderdocui.Windows
                 bool copy, compute;
                 GetDrawContext(core, out copy, out compute);
 
-                // TODO find a way (without copy-pasting tons of code)
-                // to duplicate the logic of GetResourceId() but return
-                // different information
                 if (copy || compute)
                     return -1;
 
-                if (core.APIProps.pipelineType == APIPipelineStateType.D3D11)
-                {
-                    D3D11PipelineState.ShaderStage.ResourceView view = null;
-
-                    if (Type == FollowType.OutputColour)
-                    {
-                        view = core.CurD3D11PipelineState.m_OM.RenderTargets[index];
-                    }
-                    else if (Type == FollowType.OutputDepth)
-                    {
-                        view = core.CurD3D11PipelineState.m_OM.DepthTarget;
-                    }
-                    else if (Type == FollowType.ReadWriteRes)
-                    {
-                        if (index >= core.CurD3D11PipelineState.m_OM.UAVStartSlot)
-                            view = core.CurD3D11PipelineState.m_OM.UAVs[index];
-                    }
-                    else if (Type == FollowType.InputResource)
-                    {
-                        view = core.CurD3D11PipelineState.m_PS.SRVs[index];
-                    }
-
-                    return view != null ? (int)view.FirstArraySlice : -1;
-                }
-                else
-                {
-                    if (Type == FollowType.OutputColour)
-                    {
-                        return (int)core.CurGLPipelineState.m_FB.m_DrawFBO.Color[index].Layer;
-                    }
-                    else if (Type == FollowType.OutputDepth)
-                    {
-                        return (int)core.CurGLPipelineState.m_FB.m_DrawFBO.Depth.Layer;
-                    }
-                    else if (Type == FollowType.ReadWriteRes)
-                    {
-                        if(!core.CurGLPipelineState.Images[index].Layered)
-                            return (int)core.CurGLPipelineState.Images[index].Layer;
-                    }
-                    else if (Type == FollowType.InputResource)
-                    {
-                        return (int)core.CurGLPipelineState.Textures[index].FirstSlice;
-                    }
-                }
-
-                return -1;
+                return GetBoundResource(core, arrayEl).FirstSlice;
             }
 
             public ResourceId GetResourceId(Core core)
             {
-                ResourceId id = ResourceId.Null;
+                return GetBoundResource(core, arrayEl).Id;
+            }
+
+            public int GetBoundResourceArraySize(Core core)
+            {
+                if (Type == FollowType.ReadWrite)
+                {
+                    var rw = GetReadWriteResources(core);
+
+                    var mapping = GetMapping(core);
+
+                    if (index < mapping.ReadWriteResources.Length)
+                    {
+                        var key = mapping.ReadWriteResources[index];
+
+                        if (rw.ContainsKey(key))
+                            return rw[key].Length;
+                    }
+                }
+                else if (Type == FollowType.ReadOnly)
+                {
+                    var res = GetReadOnlyResources(core);
+
+                    var mapping = GetMapping(core);
+
+                    if (index < mapping.ReadOnlyResources.Length)
+                    {
+                        var key = mapping.ReadOnlyResources[index];
+
+                        if (res.ContainsKey(key))
+                            return res[key].Length;
+                    }
+                }
+
+                return 1;
+            }
+
+            public BoundResource GetBoundResource(Core core, int arrayIdx)
+            {
+                BoundResource ret = new BoundResource();
 
                 if (Type == FollowType.OutputColour)
                 {
                     var outputs = GetOutputTargets(core);
 
-                    if(index < outputs.Length)
-                        id = outputs[index];
+                    if (index < outputs.Length)
+                        ret = outputs[index];
                 }
                 else if (Type == FollowType.OutputDepth)
                 {
-                    id = GetDepthTarget(core);
+                    ret = GetDepthTarget(core);
                 }
-                else if (Type == FollowType.ReadWriteRes)
+                else if (Type == FollowType.ReadWrite)
                 {
                     var rw = GetReadWriteResources(core);
 
-                    if (index < rw.Length)
-                        id = rw[index];
+                    var mapping = GetMapping(core);
+
+                    if (index < mapping.ReadWriteResources.Length)
+                    {
+                        var key = mapping.ReadWriteResources[index];
+
+                        if (rw.ContainsKey(key))
+                            ret = rw[key][arrayIdx];
+                    }
                 }
-                else if (Type == FollowType.InputResource)
+                else if (Type == FollowType.ReadOnly)
                 {
-                    var res = GetResources(core);
+                    var res = GetReadOnlyResources(core);
 
-                    if(index < res.Length)
-                        id = res[index];
+                    var mapping = GetMapping(core);
+
+                    if (index < mapping.ReadOnlyResources.Length)
+                    {
+                        var key = mapping.ReadOnlyResources[index];
+
+                        if (res.ContainsKey(key))
+                            ret = res[key][arrayIdx];
+                    }
                 }
 
-                return id;
+                return ret;
             }
 
-            public static ResourceId[] GetReadWriteResources(Core core)
+            public static BoundResource[] GetOutputTargets(Core core)
             {
                 var curDraw = core.CurDrawcall;
                 bool copy, compute;
                 GetDrawContext(core, out copy, out compute);
 
                 if (copy)
-                    return new ResourceId[0];
-                else if (compute)
-                    return core.CurPipelineState.GetReadWriteResources(ShaderStageType.Compute);
-                else
-                    return core.CurPipelineState.GetReadWriteResources(ShaderStageType.Pixel);
-            }
-
-            public static ResourceId[] GetOutputTargets(Core core)
-            {
-                var curDraw = core.CurDrawcall;
-                bool copy, compute;
-                GetDrawContext(core, out copy, out compute);
-
-                if (copy)
-                    return new ResourceId[] { curDraw.copyDestination };
+                    return new BoundResource[] { new BoundResource(curDraw.copyDestination) };
                 else if(compute)
-                    return new ResourceId[0];
+                    return new BoundResource[0];
                 else
-                    return core.CurPipelineState.GetOutputTargets();
+                {
+                    var ret = core.CurPipelineState.GetOutputTargets();
+
+                    if (ret.Length == 0 && curDraw != null && (curDraw.flags & DrawcallFlags.Present) != 0)
+                    {
+                        if (curDraw.copyDestination != ResourceId.Null)
+                            return new BoundResource[] { new BoundResource(curDraw.copyDestination) };
+
+                        foreach (var t in core.CurTextures)
+                            if ((t.creationFlags & TextureCreationFlags.SwapBuffer) != 0)
+                                return new BoundResource[] { new BoundResource(t.ID) };
+                    }
+
+                    return ret;
+                }
             }
 
-            public static ResourceId GetDepthTarget(Core core)
+            public static BoundResource GetDepthTarget(Core core)
             {
                 var curDraw = core.CurDrawcall;
                 bool copy, compute;
                 GetDrawContext(core, out copy, out compute);
 
                 if (copy || compute)
-                    return ResourceId.Null;
+                    return new BoundResource(ResourceId.Null);
                 else
                     return core.CurPipelineState.GetDepthTarget();
             }
 
-            public static ResourceId[] GetResources(Core core)
+            public Dictionary<BindpointMap, BoundResource[]> GetReadWriteResources(Core core)
+            {
+                return GetReadWriteResources(core, Stage);
+            }
+
+            public static Dictionary<BindpointMap, BoundResource[]> GetReadWriteResources(Core core, ShaderStageType stage)
             {
                 var curDraw = core.CurDrawcall;
                 bool copy, compute;
                 GetDrawContext(core, out copy, out compute);
 
                 if (copy)
-                    return new ResourceId[] { curDraw.copySource };
+                {
+                    return new Dictionary<BindpointMap, BoundResource[]>();
+                }
                 else if (compute)
-                    return core.CurPipelineState.GetResources(ShaderStageType.Compute);
+                {
+                    // only return compute resources for one stage
+                    if (stage == ShaderStageType.Pixel || stage == ShaderStageType.Compute)
+                        return core.CurPipelineState.GetReadWriteResources(ShaderStageType.Compute);
+                    else
+                        return new Dictionary<BindpointMap, BoundResource[]>();
+                }
                 else
-                    return core.CurPipelineState.GetResources(ShaderStageType.Pixel);
+                {
+                    return core.CurPipelineState.GetReadWriteResources(stage);
+                }
             }
 
-            public static ShaderReflection GetReflection(Core core)
+            public Dictionary<BindpointMap, BoundResource[]> GetReadOnlyResources(Core core)
+            {
+                return GetReadOnlyResources(core, Stage);
+            }
+
+            public static Dictionary<BindpointMap, BoundResource[]> GetReadOnlyResources(Core core, ShaderStageType stage)
+            {
+                var curDraw = core.CurDrawcall;
+                bool copy, compute;
+                GetDrawContext(core, out copy, out compute);
+
+                if (copy)
+                {
+                    var ret = new Dictionary<BindpointMap, BoundResource[]>();
+
+                    // only return copy source for one stage
+                    if(stage == ShaderStageType.Pixel)
+                        ret.Add(new BindpointMap(0, 0), new BoundResource[] { new BoundResource(curDraw.copySource) });
+
+                    return ret;
+                }
+                else if (compute)
+                {
+                    // only return compute resources for one stage
+                    if (stage == ShaderStageType.Pixel || stage == ShaderStageType.Compute)
+                        return core.CurPipelineState.GetReadOnlyResources(ShaderStageType.Compute);
+                    else
+                        return new Dictionary<BindpointMap, BoundResource[]>();
+                }
+                else
+                {
+                    return core.CurPipelineState.GetReadOnlyResources(stage);
+                }
+            }
+
+            public ShaderReflection GetReflection(Core core)
+            {
+                return GetReflection(core, Stage);
+            }
+
+            public static ShaderReflection GetReflection(Core core, ShaderStageType stage)
             {
                 var curDraw = core.CurDrawcall;
                 bool copy, compute;
@@ -306,24 +331,46 @@ namespace renderdocui.Windows
                 else if (compute)
                     return core.CurPipelineState.GetShaderReflection(ShaderStageType.Compute);
                 else
-                    return core.CurPipelineState.GetShaderReflection(ShaderStageType.Pixel);
+                    return core.CurPipelineState.GetShaderReflection(stage);
             }
 
-            public static ShaderBindpointMapping GetMapping(Core core)
+            public ShaderBindpointMapping GetMapping(Core core)
+            {
+                return GetMapping(core, Stage);
+            }
+
+            public static ShaderBindpointMapping GetMapping(Core core, ShaderStageType stage)
             {
                 var curDraw = core.CurDrawcall;
                 bool copy, compute;
                 GetDrawContext(core, out copy, out compute);
 
                 if (copy)
-                    return null;
+                {
+                    ShaderBindpointMapping mapping = new ShaderBindpointMapping();
+                    mapping.ConstantBlocks = new BindpointMap[0];
+                    mapping.ReadWriteResources = new BindpointMap[0];
+                    mapping.InputAttributes = new int[0];
+
+                    // for PS only add a single mapping to get the copy source
+                    if (stage == ShaderStageType.Pixel)
+                        mapping.ReadOnlyResources = new BindpointMap[] { new BindpointMap(0, 0) };
+                    else
+                        mapping.ReadOnlyResources = new BindpointMap[0];
+
+                    return mapping;
+                }
                 else if (compute)
+                {
                     return core.CurPipelineState.GetBindpointMapping(ShaderStageType.Compute);
+                }
                 else
-                    return core.CurPipelineState.GetBindpointMapping(ShaderStageType.Pixel);
+                {
+                    return core.CurPipelineState.GetBindpointMapping(stage);
+                }
             }
         }
-        private Following m_Following = new Following(FollowType.OutputColour, 0);
+        private Following m_Following = Following.Default;
 
         public class TexSettings
         {
@@ -402,12 +449,9 @@ namespace renderdocui.Windows
 
             FitToWindow = true;
             overlay.SelectedIndex = 0;
-            m_Following = new Following(FollowType.OutputColour, 0);
+            m_Following = Following.Default;
 
             texturefilter.SelectedIndex = 0;
-
-            if (m_Core.LogLoaded)
-                OnLogfileLoaded();
         }
 
         private void UI_SetupDocks()
@@ -424,7 +468,7 @@ namespace renderdocui.Windows
 
             dockPanel.ActiveDocumentChanged += new EventHandler(dockPanel_ActiveDocumentChanged);
 
-            var w3 = Helpers.WrapDockContent(dockPanel, texPanel, "Inputs");
+            var w3 = Helpers.WrapDockContent(dockPanel, roPanel, "Inputs");
             w3.DockAreas &= ~DockAreas.Document;
             w3.DockState = DockState.DockRight;
             w3.Show();
@@ -432,7 +476,7 @@ namespace renderdocui.Windows
             w3.CloseButton = false;
             w3.CloseButtonVisible = false;
 
-            var w5 = Helpers.WrapDockContent(dockPanel, rtPanel, "Outputs");
+            var w5 = Helpers.WrapDockContent(dockPanel, rwPanel, "Outputs");
             w5.DockAreas &= ~DockAreas.Document;
             w5.DockState = DockState.DockRight;
             w5.Show(w3.Pane, w3);
@@ -528,8 +572,8 @@ namespace renderdocui.Windows
         {
             Control[] persistors = {
                                        renderToolstripContainer,
-                                       texPanel,
-                                       rtPanel,
+                                       roPanel,
+                                       rwPanel,
                                        texlistContainer,
                                        pixelContextPanel
                                    };
@@ -537,6 +581,12 @@ namespace renderdocui.Windows
             foreach(var p in persistors)
                 if (persistString == p.Name && p.Parent is IDockContent && (p.Parent as DockContent).DockPanel == null)
                     return p.Parent as IDockContent;
+
+            // backwards compatibilty for rename
+            if(persistString == "texPanel")
+                return roPanel.Parent as IDockContent;
+            if(persistString == "rtPanel")
+                return rwPanel.Parent as IDockContent;
 
             return null;
         }
@@ -558,8 +608,8 @@ namespace renderdocui.Windows
             {
                 Control[] persistors = {
                                        renderToolstripContainer,
-                                       texPanel,
-                                       rtPanel,
+                                       roPanel,
+                                       rwPanel,
                                        texlistContainer,
                                        pixelContextPanel
                                    };
@@ -694,7 +744,7 @@ namespace renderdocui.Windows
                 if (m_Core.CurBuffers[i].ID == ID)
                 {
                     var viewer = new BufferViewer(m_Core, false);
-                    viewer.ViewRawBuffer(true, ID);
+                    viewer.ViewRawBuffer(true, 0, ulong.MaxValue, ID);
                     viewer.Show(DockPanel);
                     return;
                 }
@@ -764,7 +814,7 @@ namespace renderdocui.Windows
                 var fn = Path.GetFileNameWithoutExtension(f);
                 var key = fn.ToUpperInvariant();
 
-                if (!m_CustomShaders.ContainsKey(key))
+                if (!m_CustomShaders.ContainsKey(key) && !m_CustomShadersBusy.Contains(key))
                 {
                     try
                     {
@@ -834,7 +884,8 @@ namespace renderdocui.Windows
                     "}}{0}"
                     , Environment.NewLine);
             }
-            else if (m_Core.APIProps.pipelineType == APIPipelineStateType.OpenGL)
+            else if (m_Core.APIProps.pipelineType == APIPipelineStateType.OpenGL ||
+                m_Core.APIProps.pipelineType == APIPipelineStateType.Vulkan)
             {
                 src = String.Format(
                     "#version 420 core{0}" +
@@ -964,10 +1015,10 @@ namespace renderdocui.Windows
 
             saveTex.Enabled = true;
 
-            m_Following = new Following(FollowType.OutputColour, 0);
+            m_Following = Following.Default;
 
-            rtPanel.ClearThumbnails();
-            texPanel.ClearThumbnails();
+            rwPanel.ClearThumbnails();
+            roPanel.ClearThumbnails();
 
             m_HighWaterStatusLength = 0;
 
@@ -975,7 +1026,7 @@ namespace renderdocui.Windows
             IntPtr renderHandle = render.Handle;
             m_Core.Renderer.BeginInvoke((ReplayRenderer r) =>
             {
-                m_Output = r.CreateOutput(renderHandle);
+                m_Output = r.CreateOutput(renderHandle, OutputType.TexDisplay);
                 m_Output.SetPixelContext(contextHandle);
                 m_Output.SetOutputConfig(outConfig);
 
@@ -1021,13 +1072,13 @@ namespace renderdocui.Windows
 
             m_TextureSettings.Clear();
 
-            m_PrevArea = 0.0f;
+            m_PrevSize = PointF.Empty;
             m_HighWaterStatusLength = 0;
 
             saveTex.Enabled = false;
 
-            rtPanel.ClearThumbnails();
-            texPanel.ClearThumbnails();
+            rwPanel.ClearThumbnails();
+            roPanel.ClearThumbnails();
 
             texturefilter.SelectedIndex = 0;
 
@@ -1076,365 +1127,278 @@ namespace renderdocui.Windows
             UI_UpdateChannels();
         }
 
-        public void OnEventSelected(UInt32 frameID, UInt32 eventID)
+        private void InitResourcePreview(ResourcePreview prev, ResourceId id, bool force, Following follow, string bindName, string slotName)
+        {
+            if (id != ResourceId.Null || force)
+            {
+                FetchTexture tex = null;
+                foreach (var t in m_Core.CurTextures)
+                    if (t.ID == id)
+                        tex = t;
+
+                FetchBuffer buf = null;
+                foreach (var b in m_Core.CurBuffers)
+                    if (b.ID == id)
+                        buf = b;
+
+                if (tex != null)
+                {
+                    string fullname = bindName;
+                    if (tex.customName)
+                    {
+                        if (fullname.Length > 0)
+                            fullname += " = ";
+                        fullname += tex.name;
+                    }
+                    if (fullname.Length == 0)
+                        fullname = tex.name;
+
+                    prev.Init(fullname, tex.width, tex.height, tex.depth, tex.mips);
+                    IntPtr handle = prev.ThumbnailHandle;
+                    m_Core.Renderer.BeginInvoke((ReplayRenderer rep) =>
+                    {
+                        m_Output.AddThumbnail(handle, id);
+                    });
+                }
+                else if (buf != null)
+                {
+                    string fullname = bindName;
+                    if (buf.customName)
+                    {
+                        if (fullname.Length > 0)
+                            fullname += " = ";
+                        fullname += buf.name;
+                    }
+                    if (fullname.Length == 0)
+                        fullname = buf.name;
+
+                    prev.Init(fullname, buf.length, 0, 0, Math.Max(1, buf.structureSize));
+                    IntPtr handle = prev.ThumbnailHandle;
+                    m_Core.Renderer.BeginInvoke((ReplayRenderer rep) =>
+                    {
+                        m_Output.AddThumbnail(handle, ResourceId.Null);
+                    });
+                }
+                else
+                {
+                    prev.Init();
+                    IntPtr handle = prev.ThumbnailHandle;
+                    m_Core.Renderer.BeginInvoke((ReplayRenderer rep) =>
+                    {
+                        m_Output.AddThumbnail(handle, ResourceId.Null);
+                    });
+                }
+
+                prev.Tag = follow;
+                prev.SlotName = slotName;
+                prev.Visible = true;
+            }
+            else if (prev.Selected)
+            {
+                FetchTexture tex = null;
+
+                if(id != ResourceId.Null)
+                    foreach (var t in m_Core.CurTextures)
+                        if (t.ID == id)
+                            tex = t;
+
+                IntPtr handle = prev.ThumbnailHandle;
+                if (id == ResourceId.Null || tex == null)
+                    prev.Init();
+                else
+                    prev.Init("Unused", tex.width, tex.height, tex.depth, tex.mips);
+                m_Core.Renderer.BeginInvoke((ReplayRenderer rep) =>
+                {
+                    m_Output.AddThumbnail(handle, ResourceId.Null);
+                });
+            }
+            else
+            {
+                prev.Init();
+                prev.Visible = false;
+            }
+        }
+
+        private void InitStageResourcePreviews(ShaderStageType stage, ShaderResource[] resourceDetails, BindpointMap[] mapping,
+                                               Dictionary<BindpointMap, BoundResource[]> ResList,
+                                               ThumbnailStrip prevs, ref int prevIndex,
+                                               bool copy, bool rw)
+        {
+            for (int idx = 0; idx < mapping.Length; idx++)
+            {
+                var key = mapping[idx];
+
+                BoundResource[] resArray = null;
+
+                if (ResList.ContainsKey(key))
+                    resArray = ResList[key];
+
+                int arrayLen = resArray != null ? resArray.Length : 1;
+
+                for (int arrayIdx = 0; arrayIdx < arrayLen; arrayIdx++)
+                {
+                    ResourceId id = resArray != null ? resArray[arrayIdx].Id : ResourceId.Null;
+
+                    bool used = key.used;
+                    bool skip = false;
+
+                    string bindName = "";
+
+                    foreach (var bind in resourceDetails)
+                    {
+                        if (bind.bindPoint == idx && bind.IsSRV)
+                        {
+                            bindName = bind.name;
+                            break;
+                        }
+                    }
+
+                    if (skip)
+                        continue;
+
+                    if (copy)
+                    {
+                        used = true;
+                        bindName = "Source";
+                    }
+
+                    Following follow = new Following(rw ? FollowType.ReadWrite : FollowType.ReadOnly, stage, idx, arrayIdx);
+                    string slotName = String.Format("{0} {1}{2}", m_Core.CurPipelineState.Abbrev(stage), rw ? "RW " : "", idx);
+
+                    if (arrayLen > 1)
+                        slotName += String.Format("[{0}]", arrayIdx);
+
+                    if (copy)
+                        slotName = "SRC";
+
+                    // show if
+                    bool show = (used || // it's referenced by the shader - regardless of empty or not
+                        (showDisabled.Checked && !used && id != ResourceId.Null) || // it's bound, but not referenced, and we have "show disabled"
+                        (showEmpty.Checked && id == ResourceId.Null) // it's empty, and we have "show empty"
+                        );
+
+                    ResourcePreview prev;
+
+                    if (prevIndex < prevs.Thumbnails.Length)
+                    {
+                        prev = prevs.Thumbnails[prevIndex];
+                    }
+                    else
+                    {
+                        // don't create it if we're not actually going to show it
+                        if (!show)
+                            continue;
+
+                        prev = UI_CreateThumbnail(prevs);
+                    }
+
+                    prevIndex++;
+
+                    InitResourcePreview(prev, show ? id : ResourceId.Null, show, follow, bindName, slotName);
+                }
+            }
+        }
+
+        public void OnEventSelected(UInt32 eventID)
         {
             if (IsDisposed) return;
 
             UI_OnTextureSelectionChanged();
 
-            ResourceId[] RTs = Following.GetOutputTargets(m_Core);
-            ResourceId[] RWs = Following.GetReadWriteResources(m_Core);
-            ResourceId Depth = Following.GetDepthTarget(m_Core);
-            ResourceId[] Texs = Following.GetResources(m_Core);
-
-            ShaderReflection details = Following.GetReflection(m_Core);
-            ShaderBindpointMapping mapping = Following.GetMapping(m_Core);
-
-            var curDraw = m_Core.GetDrawcall(frameID, eventID);
-            bool copy = curDraw != null && (curDraw.flags & (DrawcallFlags.Copy|DrawcallFlags.Resolve)) != 0;
-
-            if (m_Output == null) return;
-
             UI_CreateThumbnails();
 
-            int i = 0;
+            if (m_Output == null) return;
+            
+            BoundResource[] RTs = Following.GetOutputTargets(m_Core);
+            BoundResource Depth = Following.GetDepthTarget(m_Core);
+
+            int rwIndex = 0;
+            int roIndex = 0;
+
+            var curDraw = m_Core.GetDrawcall(eventID);
+            bool copy = curDraw != null && (curDraw.flags & (DrawcallFlags.Copy|DrawcallFlags.Resolve)) != 0;
+            bool compute = curDraw != null && (curDraw.flags & (DrawcallFlags.Dispatch)) != 0;
+
             for(int rt=0; rt < RTs.Length; rt++)
             {
                 ResourcePreview prev;
 
-                if (i < rtPanel.Thumbnails.Length)
-                    prev = rtPanel.Thumbnails[i];
+                if (rwIndex < rwPanel.Thumbnails.Length)
+                    prev = rwPanel.Thumbnails[rwIndex];
                 else
-                    prev = UI_CreateThumbnail(rtPanel);
+                    prev = UI_CreateThumbnail(rwPanel);
 
-                if (RTs[rt] != ResourceId.Null)
-                {
-                    FetchTexture tex = null;
-                    foreach (var t in m_Core.CurTextures)
-                        if (t.ID == RTs[rt])
-                            tex = t;
+                rwIndex++;
 
-                    FetchBuffer buf = null;
-                    foreach (var b in m_Core.CurBuffers)
-                        if (b.ID == RTs[rt])
-                            buf = b;
+                Following follow = new Following(FollowType.OutputColour, ShaderStageType.Pixel, rt, 0);
+                string bindName = copy ? "Destination" : "";
+                string slotName = copy ? "DST" : String.Format("{0}{1}", m_Core.CurPipelineState.OutputAbbrev(), rt);
 
-                    string bindName = "";
-
-                    if (copy)
-                        bindName = "Destination";
-
-                    if (tex != null)
-                    {
-                        prev.Init(!tex.customName && bindName.Length > 0 ? bindName : tex.name, tex.width, tex.height, tex.depth, tex.mips);
-                        IntPtr handle = prev.ThumbnailHandle;
-                        ResourceId id = RTs[rt];
-                        m_Core.Renderer.BeginInvoke((ReplayRenderer rep) =>
-                        {
-                            m_Output.AddThumbnail(handle, id);
-                        });
-                    }
-                    else if (buf != null)
-                    {
-                        prev.Init(!buf.customName && bindName.Length > 0 ? bindName : buf.name, buf.length, 0, 0, Math.Max(1, buf.structureSize));
-                        IntPtr handle = prev.ThumbnailHandle;
-                        m_Core.Renderer.BeginInvoke((ReplayRenderer rep) =>
-                        {
-                            m_Output.AddThumbnail(handle, ResourceId.Null);
-                        });
-                    }
-                    else
-                    {
-                        prev.Init();
-                    }
-
-                    prev.Tag = new Following(FollowType.OutputColour, rt);
-                    prev.SlotName = copy ? "DST" : rt.ToString();
-                    prev.Visible = true;
-                }
-                else if (prev.Selected)
-                {
-                    prev.Init();
-                    IntPtr handle = prev.ThumbnailHandle;
-                    m_Core.Renderer.BeginInvoke((ReplayRenderer rep) =>
-                    {
-                        m_Output.AddThumbnail(handle, ResourceId.Null);
-                    });
-                }
-                else
-                {
-                    prev.Init();
-                    prev.Visible = false;
-                }
-
-                i++;
+                InitResourcePreview(prev, RTs[rt].Id, false, follow, bindName, slotName);
             }
 
-            for (int rw = 0; rw < RWs.Length; rw++)
+            // depth
             {
                 ResourcePreview prev;
-
-                if (i < rtPanel.Thumbnails.Length)
-                    prev = rtPanel.Thumbnails[i];
-                else
-                    prev = UI_CreateThumbnail(rtPanel);
                 
-                FetchTexture tex = null;
-                foreach (var t in m_Core.CurTextures)
-                    if (t.ID == RWs[rw])
-                        tex = t;
-
-                FetchBuffer buf = null;
-                foreach (var b in m_Core.CurBuffers)
-                    if (b.ID == RWs[rw])
-                        buf = b;
-
-                bool used = false;
-
-                string bindName = "";
-
-                if (details != null)
-                {
-                    foreach (var bind in details.Resources)
-                    {
-                        if (mapping.Resources[bind.bindPoint].bind == rw && bind.IsReadWrite)
-                        {
-                            used = true;
-                            bindName = "<" + bind.name + ">";
-                        }
-                    }
-                }
-                    
-                // show if
-                if (used || // it's referenced by the shader - regardless of empty or not
-                    (showDisabled.Checked && !used && RWs[rw] != ResourceId.Null) || // it's bound, but not referenced, and we have "show disabled"
-                    (showEmpty.Checked && RWs[rw] == ResourceId.Null) // it's empty, and we have "show empty"
-                    )
-                {
-                    if (tex != null)
-                    {
-                        prev.Init(!tex.customName && bindName.Length > 0 ? bindName : tex.name, tex.width, tex.height, tex.depth, tex.mips);
-                        IntPtr handle = prev.ThumbnailHandle;
-                        ResourceId id = RWs[rw];
-                        m_Core.Renderer.BeginInvoke((ReplayRenderer rep) =>
-                        {
-                            m_Output.AddThumbnail(handle, id);
-                        });
-                    }
-                    else if (buf != null)
-                    {
-                        prev.Init(!buf.customName && bindName.Length > 0 ? bindName : buf.name, buf.length, 0, 0, Math.Max(1, buf.structureSize));
-                        IntPtr handle = prev.ThumbnailHandle;
-                        m_Core.Renderer.BeginInvoke((ReplayRenderer rep) =>
-                        {
-                            m_Output.AddThumbnail(handle, ResourceId.Null);
-                        });
-                    }
-                    else
-                    {
-                        prev.Init();
-                    }
-
-                    prev.Tag = new Following(FollowType.ReadWriteRes, rw);
-                    prev.SlotName = "RW" + rw;
-                    prev.Visible = true;
-                }
-                else if (prev.Selected)
-                {
-                    prev.Init();
-                    IntPtr handle = prev.ThumbnailHandle;
-                    m_Core.Renderer.BeginInvoke((ReplayRenderer rep) =>
-                    {
-                        m_Output.AddThumbnail(handle, ResourceId.Null);
-                    });
-                }
+                if (rwIndex < rwPanel.Thumbnails.Length)
+                    prev = rwPanel.Thumbnails[rwIndex];
                 else
-                {
-                    prev.Init();
-                    prev.Visible = false;
-                }
+                    prev = UI_CreateThumbnail(rwPanel);
 
-                i++;
+                rwIndex++;
+                
+                Following follow = new Following(FollowType.OutputDepth, ShaderStageType.Pixel, 0, 0);
+
+                InitResourcePreview(prev, Depth.Id, false, follow, "", "DS");
             }
 
+            ShaderStageType[] stages = new ShaderStageType[] { 
+                ShaderStageType.Vertex,
+                ShaderStageType.Hull,
+                ShaderStageType.Domain,
+                ShaderStageType.Geometry,
+                ShaderStageType.Pixel
+            };
 
+            if (compute) stages = new ShaderStageType[] { ShaderStageType.Compute };
+
+            // display resources used for all stages
+            foreach (ShaderStageType stage in stages)
             {
-                ResourcePreview prev;
+                Dictionary<BindpointMap, BoundResource[]> RWs = Following.GetReadWriteResources(m_Core, stage);
+                Dictionary<BindpointMap, BoundResource[]> ROs = Following.GetReadOnlyResources(m_Core, stage);
 
-                // depth thumbnail is always the last one
-                if (i < rtPanel.Thumbnails.Length)
-                {
-                    // hide others
-                    for (; i < rtPanel.Thumbnails.Length - 1; i++)
-                    {
-                        rtPanel.Thumbnails[i].Init();
-                        rtPanel.Thumbnails[i].Visible = false;
-                    }
-                    prev = rtPanel.Thumbnails[rtPanel.Thumbnails.Length - 1];
-                }
-                else
-                {
-                    prev = UI_CreateThumbnail(rtPanel);
-                }
+                ShaderReflection details = Following.GetReflection(m_Core, stage);
+                ShaderBindpointMapping mapping = Following.GetMapping(m_Core, stage);
 
-                if (Depth != ResourceId.Null)
-                {
-                    FetchTexture tex = null;
-                    foreach (var t in m_Core.CurTextures)
-                        if (t.ID == Depth)
-                            tex = t;
+                InitStageResourcePreviews(stage,
+                    details != null ? details.ReadWriteResources : new ShaderResource[0],
+                    mapping.ReadWriteResources,
+                    RWs, rwPanel, ref rwIndex, copy, true);
 
-                    FetchBuffer buf = null;
-                    foreach (var b in m_Core.CurBuffers)
-                        if (b.ID == Depth)
-                            buf = b;
-
-                    if (tex != null)
-                    {
-                        prev.Init(tex.name, tex.width, tex.height, tex.depth, tex.mips);
-                        IntPtr handle = prev.ThumbnailHandle;
-                        m_Core.Renderer.BeginInvoke((ReplayRenderer rep) =>
-                        {
-                            m_Output.AddThumbnail(handle, Depth);
-                        });
-                    }
-                    else if (buf != null)
-                    {
-                        prev.Init(buf.name, buf.length, 0, 0, Math.Max(1, buf.structureSize));
-                        IntPtr handle = prev.ThumbnailHandle;
-                        m_Core.Renderer.BeginInvoke((ReplayRenderer rep) =>
-                        {
-                            m_Output.AddThumbnail(handle, ResourceId.Null);
-                        });
-                    }
-                    else
-                    {
-                        prev.Init();
-                    }
-
-                    prev.Tag = new Following(FollowType.OutputDepth, 0);
-                    prev.SlotName = "D";
-                    prev.Visible = true;
-                }
-                else if (prev.Selected)
-                {
-                    prev.Init();
-                    IntPtr handle = prev.ThumbnailHandle;
-                    m_Core.Renderer.BeginInvoke((ReplayRenderer rep) =>
-                    {
-                        m_Output.AddThumbnail(handle, ResourceId.Null);
-                    });
-                }
-                else
-                {
-                    prev.Init();
-                    prev.Visible = false;
-                }
+                InitStageResourcePreviews(stage,
+                    details != null ? details.ReadOnlyResources : new ShaderResource[0],
+                    mapping.ReadOnlyResources,
+                    ROs, roPanel, ref roIndex, copy, false);
             }
 
-            rtPanel.RefreshLayout();
+            // hide others
+            for (; rwIndex < rwPanel.Thumbnails.Length - 1; rwIndex++)
+            {
+                rwPanel.Thumbnails[rwIndex].Init();
+                rwPanel.Thumbnails[rwIndex].Visible = false;
+            }
+
+            rwPanel.RefreshLayout();
             
-            i = 0;
-            for(; i < Texs.Length; i++)
+            for (; roIndex < roPanel.Thumbnails.Length - 1; roIndex++)
             {
-                ResourcePreview prev;
-
-                if (i < texPanel.Thumbnails.Length)
-                    prev = texPanel.Thumbnails[i];
-                else
-                    prev = UI_CreateThumbnail(texPanel);
-
-                bool used = false;
-
-                string bindName = "";
-
-                if (details != null)
-                {
-                    foreach (var bind in details.Resources)
-                    {
-                        if (mapping.Resources[bind.bindPoint].bind == i && bind.IsSRV)
-                        {
-                            used = true;
-                            bindName = "<" + bind.name + ">";
-                        }
-                    }
-                }
-
-                if (copy)
-                {
-                    used = true;
-                    bindName = "Source";
-                }
-
-                // show if
-                if (used || // it's referenced by the shader - regardless of empty or not
-                    (showDisabled.Checked && !used && Texs[i] != ResourceId.Null) || // it's bound, but not referenced, and we have "show disabled"
-                    (showEmpty.Checked && Texs[i] == ResourceId.Null) // it's empty, and we have "show empty"
-                    )
-                {
-                    FetchTexture tex = null;
-                    foreach (var t in m_Core.CurTextures)
-                        if (t.ID == Texs[i])
-                            tex = t;
-
-                    FetchBuffer buf = null;
-                    foreach (var b in m_Core.CurBuffers)
-                        if (b.ID == Texs[i])
-                            buf = b;
-
-                    if (tex != null)
-                    {
-                        prev.Init(!tex.customName && bindName.Length > 0 ? bindName : tex.name, tex.width, tex.height, tex.depth, tex.mips);
-                        IntPtr handle = prev.ThumbnailHandle;
-                        ResourceId id = Texs[i];
-                        m_Core.Renderer.BeginInvoke((ReplayRenderer rep) =>
-                        {
-                            m_Output.AddThumbnail(handle, id);
-                        });
-                    }
-                    else if (buf != null)
-                    {
-                        prev.Init(!buf.customName && bindName.Length > 0 ? bindName : buf.name, buf.length, 0, 0, Math.Max(1, buf.structureSize));
-                        IntPtr handle = prev.ThumbnailHandle;
-                        m_Core.Renderer.BeginInvoke((ReplayRenderer rep) =>
-                        {
-                            m_Output.AddThumbnail(handle, ResourceId.Null);
-                        });
-                    }
-                    else
-                    {
-                        prev.Init();
-                    }
-
-                    prev.Tag = new Following(FollowType.InputResource, i);
-                    prev.SlotName = copy ? "SRC" : i.ToString();
-                    prev.Visible = true;
-                }
-                else if (prev.Selected)
-                {
-                    FetchTexture tex = null;
-                    foreach (var t in m_Core.CurTextures)
-                        if (t.ID == Texs[i])
-                            tex = t;
-
-                    IntPtr handle = prev.ThumbnailHandle;
-                    if (Texs[i] == ResourceId.Null || tex == null)
-                        prev.Init();
-                    else
-                        prev.Init("Unused", tex.width, tex.height, tex.depth, tex.mips);
-                    m_Core.Renderer.BeginInvoke((ReplayRenderer rep) =>
-                    {
-                        m_Output.AddThumbnail(handle, ResourceId.Null);
-                    });
-                }
-                else
-                {
-                    prev.Init();
-                    prev.Visible = false;
-                }
+                roPanel.Thumbnails[roIndex].Init();
+                roPanel.Thumbnails[roIndex].Visible = false;
             }
 
-            texPanel.RefreshLayout();
+            roPanel.RefreshLayout();
 
             m_Core.Renderer.BeginInvoke(RT_UpdateAndDisplay);
 
@@ -1459,31 +1423,31 @@ namespace renderdocui.Windows
 
         private void UI_CreateThumbnails()
         {
-            if (rtPanel.Thumbnails.Length > 0 || texPanel.Thumbnails.Length > 0) return;
+            if (rwPanel.Thumbnails.Length > 0 || roPanel.Thumbnails.Length > 0) return;
 
-            rtPanel.SuspendLayout();
-            texPanel.SuspendLayout();
+            rwPanel.SuspendLayout();
+            roPanel.SuspendLayout();
 
             // these will expand, but we make sure that there is a good set reserved
             for (int i = 0; i < 9; i++)
             {
-                var prev = UI_CreateThumbnail(rtPanel);
+                var prev = UI_CreateThumbnail(rwPanel);
 
                 if(i == 0)
                     prev.Selected = true;
             }
 
             for (int i = 0; i < 128; i++)
-                UI_CreateThumbnail(texPanel);
+                UI_CreateThumbnail(roPanel);
 
-            rtPanel.ResumeLayout();
-            texPanel.ResumeLayout();
+            rwPanel.ResumeLayout();
+            roPanel.ResumeLayout();
         }
 
         private int prevFirstArraySlice = -1;
         private int prevHighestMip = -1;
 
-        private float m_PrevArea = 0.0f;
+        private PointF m_PrevSize = PointF.Empty;
 
         private void UI_OnTextureSelectionChanged()
         {
@@ -1523,29 +1487,42 @@ namespace renderdocui.Windows
             m_CurRealValue = null;
 
             // try to maintain the pan in the new texture. If the new texture
-            // is an integer multiple of the old texture, this will keep the
-            // top left pixel the same. Due to the difference in scale, the rest
-            // of the image will be out though. This is useful for downsample chains and
-            // things where you're flipping back and forth between overlapping
-            // textures, but really needs a mode where the zoom level is changed
-            // to compensate as well.
-            float curArea = (float)CurrentTexture.width * (float)CurrentTexture.height;
+            // is approx an integer multiple of the old texture, just changing
+            // the scale will keep everything the same. This is useful for
+            // downsample chains and things where you're flipping back and forth
+            // between overlapping textures, but even in the non-integer case
+            // pan will be kept approximately the same.
+            PointF curSize = new PointF((float)CurrentTexture.width, (float)CurrentTexture.height);
+            float curArea = curSize.Area();
+            float prevArea = m_PrevSize.Area();
 
-            if(m_PrevArea > 0.0f)
+            if (prevArea > 0.0f)
             {
                 float prevX = m_TexDisplay.offx;
                 float prevY = m_TexDisplay.offy;
+                float prevScale = m_TexDisplay.scale;
 
-                // this scale factor is arbitrary really, only intention is to have
-                // integer scales come out precisely, other 'similar' sizes will be
-                // similar ish
-                float scaleFactor = (float)(Math.Sqrt(curArea) / Math.Sqrt(m_PrevArea));
+                // allow slight difference in aspect ratio for rounding errors
+                // in downscales (e.g. 1680x1050 -> 840x525 -> 420x262 in the
+                // last downscale the ratios are 1.6 and 1.603053435).
+                if (Math.Abs(curSize.Aspect() - m_PrevSize.Aspect()) < 0.01f)
+                {
+                    m_TexDisplay.scale *= m_PrevSize.X / curSize.X;
+                    CurrentZoomValue = m_TexDisplay.scale;
+                }
+                else
+                {
+                    // this scale factor is arbitrary really, only intention is to have
+                    // integer scales come out precisely, other 'similar' sizes will be
+                    // similar ish
+                    float scaleFactor = (float)(Math.Sqrt(curArea) / Math.Sqrt(prevArea));
 
-                m_TexDisplay.offx = prevX * scaleFactor;
-                m_TexDisplay.offy = prevY * scaleFactor;
+                    m_TexDisplay.offx = prevX * scaleFactor;
+                    m_TexDisplay.offy = prevY * scaleFactor;
+                }
             }
 
-            m_PrevArea = curArea;
+            m_PrevSize = curSize;
 
             // refresh scroll position
             ScrollPosition = ScrollPosition;
@@ -1837,10 +1814,10 @@ namespace renderdocui.Windows
                         case FollowType.OutputDepth:
                             m_PreviewPanel.Text = string.Format("Cur Depth Output - {0}", name);
                             break;
-                        case FollowType.ReadWriteRes:
+                        case FollowType.ReadWrite:
                             m_PreviewPanel.Text = string.Format("Cur RW Output - {0}", name);
                             break;
-                        case FollowType.InputResource:
+                        case FollowType.ReadOnly:
                             m_PreviewPanel.Text = string.Format("Cur Input {0} - {1}", m_Following.index, name);
                             break;
                     }
@@ -1855,10 +1832,10 @@ namespace renderdocui.Windows
                         case FollowType.OutputDepth:
                             m_PreviewPanel.Text = string.Format("Cur Depth Output");
                             break;
-                        case FollowType.ReadWriteRes:
+                        case FollowType.ReadWrite:
                             m_PreviewPanel.Text = string.Format("Cur RW Output");
                             break;
-                        case FollowType.InputResource:
+                        case FollowType.ReadOnly:
                             m_PreviewPanel.Text = string.Format("Cur Input {0}", m_Following.index);
                             break;
                     }
@@ -1932,7 +1909,7 @@ namespace renderdocui.Windows
 
             if (tex == null) return;
 
-            bool dsv = ((tex.creationFlags & TextureCreationFlags.DSV) != 0);
+            bool dsv = ((tex.creationFlags & TextureCreationFlags.DSV) != 0) || (tex.format.compType == FormatComponentType.Depth);
             bool uintTex = (tex.format.compType == FormatComponentType.UInt);
             bool sintTex = (tex.format.compType == FormatComponentType.SInt);
 
@@ -2112,7 +2089,11 @@ namespace renderdocui.Windows
                 m_TexDisplay.linearDisplayAsGamma = gammaDisplay.Checked;
             }
 
-            if (tex != null && (tex.creationFlags & TextureCreationFlags.DSV) > 0 &&
+            bool dsv = false;
+            if(tex != null)
+                dsv = ((tex.creationFlags & TextureCreationFlags.DSV) != 0) || (tex.format.compType == FormatComponentType.Depth);
+
+            if (dsv &&
                 (string)channels.SelectedItem != "Custom")
             {
                 customRed.Visible = false;
@@ -2288,12 +2269,9 @@ namespace renderdocui.Windows
 
         private void pixelContext_Paint(object sender, PaintEventArgs e)
         {
-            if (m_Output == null || m_Core.Renderer == null || PixelPicked == false)
+            if (m_Output == null || m_Core.Renderer == null)
             {
-                if (backcolorPick.Checked)
-                    e.Graphics.Clear(colorDialog.Color);
-                else
-                    DrawCheckerboard(e.Graphics, pixelContext.DisplayRectangle);
+                DrawCheckerboard(e.Graphics, pixelContext.DisplayRectangle);
                 return;
             }
 
@@ -2312,10 +2290,10 @@ namespace renderdocui.Windows
                 return;
             }
 
-            foreach (var prev in rtPanel.Thumbnails)
+            foreach (var prev in rwPanel.Thumbnails)
                 if (prev.Unbound) prev.Clear();
 
-            foreach (var prev in texPanel.Thumbnails)
+            foreach (var prev in roPanel.Thumbnails)
                 if (prev.Unbound) prev.Clear();
 
             m_Core.Renderer.Invoke((ReplayRenderer r) => { if (m_Output != null) m_Output.Display(); });
@@ -2409,6 +2387,8 @@ namespace renderdocui.Windows
 
         private float GetFitScale()
         {
+            if (CurrentTexture == null)
+                return 1.0f;
             float xscale = (float)render.Width / (float)CurrentTexDisplayWidth;
             float yscale = (float)render.Height / (float)CurrentTexDisplayHeight;
             return Math.Min(xscale, yscale);
@@ -2489,22 +2469,6 @@ namespace renderdocui.Windows
             float prevScale = m_TexDisplay.scale;
 
             m_TexDisplay.scale = Math.Max(0.1f, Math.Min(256.0f, s));
-
-            FetchTexture tex = CurrentTexture;
-
-            if (tex == null)
-            {
-                if(m_Core.LogLoaded)
-                    foreach (var t in m_Core.CurTextures)
-                        if (t.ID == m_TexDisplay.texid)
-                            tex = t;
-
-                if(tex == null)
-                    return;
-            }
-
-            //render.Width = Math.Min(500, (int)(tex.width * m_TexDisplay.scale));
-            //render.Height = Math.Min(500, (int)(tex.height * m_TexDisplay.scale));
 
             m_Core.Renderer.BeginInvoke(RT_UpdateAndDisplay);
 
@@ -2589,7 +2553,7 @@ namespace renderdocui.Windows
                 m_Output.SetPixelContextLocation((UInt32)x, (UInt32)y);
 
             if (m_TexDisplay.FlipY)
-                y = (int)tex.height - y;
+                y = (int)(tex.height - 1) - y;
 
             var pickValue = m_Output.PickPixel(m_TexDisplay.texid, true, (UInt32)x, (UInt32)y,
                                                     m_TexDisplay.sliceFace, m_TexDisplay.mip, m_TexDisplay.sampleIdx);
@@ -2755,7 +2719,7 @@ namespace renderdocui.Windows
                         {
                             UInt32 y = (UInt32)m_CurHoverPixel.Y;
                             if (m_TexDisplay.FlipY)
-                                y = tex.height - y;
+                                y = (uint)(tex.height - 1) - y;
                             RT_UpdateHoverColour(m_Output.PickPixel(m_TexDisplay.texid, true, (UInt32)m_CurHoverPixel.X, y,
                                                                       m_TexDisplay.sliceFace, m_TexDisplay.mip, m_TexDisplay.sampleIdx));
                         }
@@ -2925,6 +2889,12 @@ namespace renderdocui.Windows
         private void fitToWindow_CheckedChanged(object sender, EventArgs e)
         {
             UI_UpdateFittedScale();
+        }
+
+        private void zoomExactSize_Click(object sender, EventArgs e)
+        {
+            fitToWindow.Checked = false;
+            UI_SetScale(1.0f);
         }
 
         private void backcolorPick_Click(object sender, EventArgs e)
@@ -3423,6 +3393,16 @@ namespace renderdocui.Windows
             }));
         }
 
+        private void viewTexBuffer_Click(object sender, EventArgs e)
+        {
+            if (CurrentTexture != null)
+            {
+                var viewer = new BufferViewer(m_Core, false);
+                viewer.ViewRawBuffer(false, 0, ulong.MaxValue, CurrentTexture.ID);
+                viewer.Show(this.DockPanel);
+            }
+        }
+
         private TextureSaveDialog m_SaveDialog = null;
 
         private void saveTex_Click(object sender, EventArgs e)
@@ -3593,9 +3573,42 @@ namespace renderdocui.Windows
                                 continue;
                             }
 
-                            var curDraw = m_Core.GetDrawcall(m_Core.CurFrame, u.eventID);
+                            var curDraw = m_Core.GetDrawcall(u.eventID);
 
-                            if (u.usage != us || curDraw.previous == null || curDraw.previous.eventID != end)
+                            bool distinct = false;
+
+                            // if the usage is different from the last, add a new entry,
+                            // or if the previous draw link is broken.
+                            if (u.usage != us || curDraw.previous == null)
+                            {
+                                distinct = true;
+                            }
+                            else
+                            {
+                                // otherwise search back through real draws, to see if the
+                                // last event was where we were - otherwise it's a new
+                                // distinct set of drawcalls and should have a separate
+                                // entry in the context menu
+                                FetchDrawcall prev = curDraw.previous;
+
+                                while(prev != null && prev.eventID > end)
+                                {
+                                    if((prev.flags & (DrawcallFlags.Dispatch|DrawcallFlags.Drawcall|DrawcallFlags.CmdList)) == 0)
+                                    {
+                                        prev = prev.previous;
+                                    }
+                                    else
+                                    {
+                                        distinct = true;
+                                        break;
+                                    }
+
+                                    if(prev == null)
+                                        distinct = true;
+                                }
+                            }
+
+                            if(distinct)
                             {
                                 AddResourceUsageEntry(menuItems, start, end, us);
                                 start = end = u.eventID;
@@ -3644,10 +3657,10 @@ namespace renderdocui.Windows
 
                 var follow = (Following)prev.Tag;
 
-                foreach (var p in rtPanel.Thumbnails)
+                foreach (var p in rwPanel.Thumbnails)
                     p.Selected = false;
 
-                foreach (var p in texPanel.Thumbnails)
+                foreach (var p in roPanel.Thumbnails)
                     p.Selected = false;
 
                 m_Following = follow;
@@ -3696,7 +3709,7 @@ namespace renderdocui.Windows
                 var c = (ToolStripItem)sender;
 
                 if (c.Tag is uint)
-                    m_Core.SetEventID(null, m_Core.CurFrame, (uint)c.Tag);
+                    m_Core.SetEventID(null, (uint)c.Tag);
                 else if (c.Tag is ResourceId)
                     ViewTexture((ResourceId)c.Tag, false);
             }
@@ -3707,7 +3720,7 @@ namespace renderdocui.Windows
             showDisabled.Checked = !showDisabled.Checked;
 
             if (m_Core.LogLoaded)
-                OnEventSelected(m_Core.CurFrame, m_Core.CurEvent);
+                OnEventSelected(m_Core.CurEvent);
         }
 
         private void showEmpty_Click(object sender, EventArgs e)
@@ -3715,7 +3728,7 @@ namespace renderdocui.Windows
             showEmpty.Checked = !showEmpty.Checked;
 
             if (m_Core.LogLoaded)
-                OnEventSelected(m_Core.CurFrame, m_Core.CurEvent);
+                OnEventSelected(m_Core.CurEvent);
         }
 
         private void TextureViewer_FormClosed(object sender, FormClosedEventArgs e)

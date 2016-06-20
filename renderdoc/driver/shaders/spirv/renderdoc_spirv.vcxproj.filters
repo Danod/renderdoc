@@ -15,6 +15,9 @@
     <ClCompile Include="..\..\..\3rdparty\glslang\SPIRV\GlslangToSpv.cpp">
       <Filter>3rdparty\glslang</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\3rdparty\glslang\SPIRV\InReadableOrder.cpp">
+      <Filter>3rdparty\glslang</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\3rdparty\glslang\SPIRV\SpvBuilder.cpp">
       <Filter>3rdparty\glslang</Filter>
     </ClCompile>
@@ -108,6 +111,15 @@
     <ClCompile Include="spirv_compile.cpp" />
     <ClCompile Include="spirv_disassemble.cpp" />
     <ClCompile Include="spirv_common.cpp" />
+    <ClCompile Include="..\..\..\3rdparty\glslang\hlsl\hlslGrammar.cpp">
+      <Filter>3rdparty\glslang</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\3rdparty\glslang\hlsl\hlslParseHelper.cpp">
+      <Filter>3rdparty\glslang</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\3rdparty\glslang\hlsl\hlslScanContext.cpp">
+      <Filter>3rdparty\glslang</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\3rdparty\glslang\OGLCompilersDLL\InitializeDll.h">
@@ -206,15 +218,21 @@
     <ClInclude Include="..\..\..\3rdparty\glslang\glslang\OSDependent\osinclude.h">
       <Filter>3rdparty\glslang</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\3rdparty\glslang\glslang\OSDependent\Windows\osinclude.h">
-      <Filter>3rdparty\glslang</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\3rdparty\glslang\glslang\OSDependent\Unix\osinclude.h">
-      <Filter>3rdparty\glslang</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\..\3rdparty\glslang\glslang\Public\ShaderLang.h">
       <Filter>3rdparty\glslang</Filter>
     </ClInclude>
     <ClInclude Include="spirv_common.h" />
+    <ClInclude Include="..\..\..\3rdparty\glslang\hlsl\hlslGrammar.h">
+      <Filter>3rdparty\glslang</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rdparty\glslang\hlsl\hlslParseHelper.h">
+      <Filter>3rdparty\glslang</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rdparty\glslang\hlsl\hlslScanContext.h">
+      <Filter>3rdparty\glslang</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\3rdparty\glslang\hlsl\hlslTokens.h">
+      <Filter>3rdparty\glslang</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

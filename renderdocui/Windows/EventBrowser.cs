@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -43,7 +44,6 @@ namespace renderdocui.Windows
     {
         class DeferredEvent
         {
-            public UInt32 frameID = 0;
             public UInt32 eventID = 0;
 
             public bool marker = false;
@@ -53,7 +53,7 @@ namespace renderdocui.Windows
             public UInt32 lastDefEv = 0;
         }
 
-        private List<TreelistView.Node> m_FrameNodes = new List<TreelistView.Node>();
+        private TreelistView.Node m_FrameNode = null;
 
         private Core m_Core;
 
@@ -226,9 +226,22 @@ namespace renderdocui.Windows
             return new TreelistView.Node(new object[] { "", "", text, -1.0 });
         }
 
+        private TreelistView.Node MakeNode(UInt32 minEID, UInt32 maxEID, UInt32 draw, string text, double duration)
+        {
+            return new TreelistView.Node(new object[] { String.Format("{0}-{1}", minEID, maxEID), draw, text, duration });
+        }
+
         private TreelistView.Node MakeNode(UInt32 EID, UInt32 draw, string text, double duration)
         {
             return new TreelistView.Node(new object[] { EID, draw, text, duration });
+        }
+
+        private uint GetEndEventID(FetchDrawcall drawcall)
+        {
+            if (drawcall.children.Length == 0)
+                return drawcall.eventID;
+
+            return GetEndEventID(drawcall.children.Last());
         }
 
         private TreelistView.Node AddDrawcall(FetchDrawcall drawcall, TreelistView.Node root)
@@ -240,14 +253,40 @@ namespace renderdocui.Windows
             }
 
             UInt32 eventNum = drawcall.eventID;
-            TreelistView.Node drawNode = MakeNode(eventNum, drawcall.drawcallID, drawcall.name, 0.0);
+            TreelistView.Node drawNode = null;
+            
+            if(drawcall.children.Length > 0)
+                drawNode = MakeNode(eventNum, GetEndEventID(drawcall), drawcall.drawcallID, drawcall.name, 0.0);
+            else
+                drawNode = MakeNode(eventNum, drawcall.drawcallID, drawcall.name, 0.0);
+
+            if (m_Core.Config.EventBrowser_ApplyColours)
+            {
+                // if alpha isn't 0, assume the colour is valid
+                if ((drawcall.flags & (DrawcallFlags.PushMarker | DrawcallFlags.SetMarker)) > 0 && drawcall.markerColour[3] > 0.0f)
+                {
+                    float red = drawcall.markerColour[0];
+                    float green = drawcall.markerColour[1];
+                    float blue = drawcall.markerColour[2];
+                    float alpha = drawcall.markerColour[3];
+
+                    drawNode.TreeLineColor = drawcall.GetColor();
+                    drawNode.TreeLineWidth = 3.0f;
+
+                    if (m_Core.Config.EventBrowser_ColourEventRow)
+                    {
+                        drawNode.BackColor = drawcall.GetColor();
+                        if (drawcall.ShouldUseWhiteText())
+                            drawNode.ForeColor = Color.White;
+                    }
+                }
+            }
 
             DeferredEvent def = new DeferredEvent();
-            def.frameID = m_Core.CurFrame;
             def.eventID = eventNum;
             def.marker = (drawcall.flags & DrawcallFlags.SetMarker) != 0;
 
-            if (drawcall.context != m_Core.FrameInfo[m_Core.CurFrame].immContextId)
+            if (drawcall.context != m_Core.FrameInfo.immContextId)
             {
                 def.defCtx = drawcall.context;
                 def.lastDefEv = drawcall.eventID;
@@ -303,6 +342,16 @@ namespace renderdocui.Windows
             return drawNode;
         }
 
+        private uint GetNodeEventID(TreelistView.Node n)
+        {
+            DeferredEvent def = n.Tag as DeferredEvent;
+
+            if (def != null)
+                return def.eventID;
+
+            return 0;
+        }
+
         private void SetDrawcallTimes(TreelistView.Node n, Dictionary<uint, List<CounterResult>> times)
         {
             if (n == null || times == null) return;
@@ -313,7 +362,7 @@ namespace renderdocui.Windows
             // look up leaf nodes in the dictionary
             if (n.Nodes.IsEmpty())
             {
-                uint eid = (uint)n["EID"];
+                uint eid = GetNodeEventID(n);
 
                 if (times.ContainsKey(eid))
                     duration = times[eid][0].value.d;
@@ -345,7 +394,6 @@ namespace renderdocui.Windows
             frame["Duration"] = -1.0;
 
             DeferredEvent startEv = new DeferredEvent();
-            startEv.frameID = m_Core.CurFrame;
             startEv.eventID = 0;
 
             frame.Nodes.Clear();
@@ -363,7 +411,7 @@ namespace renderdocui.Windows
         {
             eventView.BeginUpdate();
             eventView.Nodes.Clear();
-            m_FrameNodes.Clear();
+            m_FrameNode = null;
             eventView.EndUpdate();
 
             ClearBookmarks();
@@ -376,8 +424,6 @@ namespace renderdocui.Windows
 
         public void OnLogfileLoaded()
         {
-            FetchFrameInfo[] frameList = m_Core.FrameInfo;
-
             findEventButton.Enabled = true;
             jumpEventButton.Enabled = true;
             timeDraws.Enabled = true;
@@ -389,21 +435,14 @@ namespace renderdocui.Windows
 
             eventView.Nodes.Clear();
 
-            m_FrameNodes.Clear();
-
-            for (int curFrame = 0; curFrame < frameList.Length; curFrame++)
             {
-                TreelistView.Node frame = eventView.Nodes.Add(MakeMarker("Frame #" + frameList[curFrame].frameNumber.ToString()));
+                m_FrameNode = eventView.Nodes.Add(MakeMarker("Frame #" + m_Core.FrameInfo.frameNumber.ToString()));
 
-                m_FrameNodes.Add(frame);
+                AddFrameDrawcalls(m_FrameNode, m_Core.GetDrawcalls());
             }
 
             eventView.EndUpdate();
-                
-            for (int curFrame = 0; curFrame < frameList.Length; curFrame++)
-                AddFrameDrawcalls(m_FrameNodes[curFrame], m_Core.GetDrawcalls((UInt32)curFrame));
 
-            if (frameList.Length > 0)
             {
                 // frame 1 -> event 1
                 TreelistView.Node node = eventView.Nodes[0].Nodes[0];
@@ -412,7 +451,9 @@ namespace renderdocui.Windows
 
                 DeferredEvent evt = eventView.Nodes[0].Nodes.LastNode.Tag as DeferredEvent;
 
-                m_Core.SetEventID(null, evt.frameID, evt.eventID + 1);
+                m_Core.SetEventID(null, evt.eventID + 1);
+
+                m_FrameNode.Tag = evt;
 
                 eventView.NodesSelection.Clear();
                 eventView.NodesSelection.Add(eventView.Nodes[0]);
@@ -431,7 +472,7 @@ namespace renderdocui.Windows
             eventView.EnsureVisible(n);
         }
 
-        private bool FindEventNode(ref TreelistView.Node found, TreelistView.NodeCollection nodes, UInt32 frameID, UInt32 eventID)
+        private bool FindEventNode(ref TreelistView.Node found, TreelistView.NodeCollection nodes, UInt32 eventID)
         {
             foreach (var n in nodes)
             {
@@ -449,7 +490,7 @@ namespace renderdocui.Windows
 
                 if (n.Nodes.Count > 0)
                 {
-                    bool exact = FindEventNode(ref found, n.Nodes, frameID, eventID);
+                    bool exact = FindEventNode(ref found, n.Nodes, eventID);
                     if (exact) return true;
                 }
             }
@@ -457,9 +498,9 @@ namespace renderdocui.Windows
             return false;
         }
 
-        private bool FindEventNode(ref TreelistView.Node found, UInt32 frameID, UInt32 eventID)
+        private bool FindEventNode(ref TreelistView.Node found, UInt32 eventID)
         {
-            bool ret = FindEventNode(ref found, eventView.Nodes[0].Nodes, frameID, eventID);
+            bool ret = FindEventNode(ref found, eventView.Nodes[0].Nodes, eventID);
 
             while (found != null && found.NextSibling != null && found.NextSibling.Tag is DeferredEvent)
             {
@@ -474,12 +515,12 @@ namespace renderdocui.Windows
             return ret;
         }
 
-        private bool SelectEvent(UInt32 frameID, UInt32 eventID)
+        private bool SelectEvent(UInt32 eventID)
         {
             if (eventView.Nodes.Count == 0) return false;
 
             TreelistView.Node found = null;
-            FindEventNode(ref found, frameID, eventID);
+            FindEventNode(ref found, eventID);
 
             if (found != null)
             {
@@ -496,7 +537,7 @@ namespace renderdocui.Windows
         {
             foreach (var n in nodes)
             {
-                if (!IsBookmarked((UInt32)n["EID"]))
+                if (!IsBookmarked(GetNodeEventID(n)))
                     n.Image = null;
 
                 if (n.Nodes.Count > 0)
@@ -526,7 +567,7 @@ namespace renderdocui.Windows
                 {
                     if (n["Name"].ToString().ToUpperInvariant().Contains(filter))
                     {
-                        if (!IsBookmarked((UInt32)n["EID"]))
+                        if (!IsBookmarked(GetNodeEventID(n)))
                             n.Image = global::renderdocui.Properties.Resources.find;
                         results++;
                     }
@@ -555,7 +596,7 @@ namespace renderdocui.Windows
             {
                 if (n.Tag is DeferredEvent)
                 {
-                    if ((UInt32)n["EID"] > after && n["Name"].ToString().ToUpperInvariant().Contains(filter))
+                    if (GetNodeEventID(n) > after && n["Name"].ToString().ToUpperInvariant().Contains(filter))
                         return n;
                 }
 
@@ -611,9 +652,9 @@ namespace renderdocui.Windows
             return FindEvent(eventView.Nodes[0].Nodes, filter.ToUpperInvariant(), after, forward);
         }
 
-        public void OnEventSelected(UInt32 frameID, UInt32 eventID)
+        public void OnEventSelected(UInt32 eventID)
         {
-            SelectEvent(frameID, eventID);
+            SelectEvent(eventID);
 
             HighlightBookmarks();
 
@@ -627,18 +668,12 @@ namespace renderdocui.Windows
                 DeferredEvent def = eventView.SelectedNode.Tag as DeferredEvent;
 
                 if (def.defCtx != ResourceId.Null)
-                    m_Core.SetContextFilter(this, 0, def.eventID, def.defCtx, def.firstDefEv, def.lastDefEv);
+                    m_Core.SetContextFilter(this, def.eventID, def.defCtx, def.firstDefEv, def.lastDefEv);
                 else
-                    m_Core.SetEventID(this, 0, def.eventID);
+                    m_Core.SetEventID(this, def.eventID);
             }
 
             HighlightBookmarks();
-        }
-
-        private void EventBrowser_Shown(object sender, EventArgs e)
-        {
-            if (m_Core.LogLoaded)
-                OnLogfileLoaded();
         }
 
         private void ShowJump()
@@ -690,7 +725,7 @@ namespace renderdocui.Windows
                     {
                         if (HasBookmark(i))
                         {
-                            SelectEvent(0, GetBookmark(i));
+                            SelectEvent(GetBookmark(i));
                         }
                     }
                 }
@@ -778,9 +813,8 @@ namespace renderdocui.Windows
 
                 var desc = r.DescribeCounter(counters[0]);
 
-                Dictionary<uint, List<CounterResult>>[] times = new Dictionary<uint, List<CounterResult>>[m_Core.FrameInfo.Length];
-                for (int curFrame = 0; curFrame < m_Core.FrameInfo.Length; curFrame++)
-                    times[curFrame] = r.FetchCounters((UInt32)curFrame, 0, ~0U, counters);
+                Dictionary<uint, List<CounterResult>> times = new Dictionary<uint, List<CounterResult>>();
+                times = r.FetchCounters(counters);
 
                 BeginInvoke((MethodInvoker)delegate
                 {
@@ -792,8 +826,7 @@ namespace renderdocui.Windows
 
                     eventView.BeginUpdate();
 
-                    for (int curFrame = 0; curFrame < m_FrameNodes.Count; curFrame++)
-                        SetDrawcallTimes(m_FrameNodes[curFrame], times[curFrame]);
+                    SetDrawcallTimes(m_FrameNode, times);
 
                     eventView.EndUpdate();
                 });
@@ -898,7 +931,7 @@ namespace renderdocui.Windows
                 UInt32 eid = 0;
                 if (UInt32.TryParse(jumpToEID.Text, out eid))
                 {
-                    SelectEvent(0, eid);
+                    SelectEvent(eid);
                 }
 
                 //HideJumpAndFind();
@@ -943,7 +976,7 @@ namespace renderdocui.Windows
             int eid = FindEvent(findEvent.Text, curEID, forward);
             if (eid >= 0)
             {
-                SelectEvent(0, (UInt32)eid);
+                SelectEvent((UInt32)eid);
                 findEvent.BackColor = SystemColors.Window;
             }
             else // if(WrapSearch)
@@ -951,7 +984,7 @@ namespace renderdocui.Windows
                 eid = FindEvent(findEvent.Text, forward ? 0 : UInt32.MaxValue, forward);
                 if (eid >= 0)
                 {
-                    SelectEvent(0, (UInt32)eid);
+                    SelectEvent((UInt32)eid);
                     findEvent.BackColor = SystemColors.Window;
                 }
                 else
@@ -990,7 +1023,7 @@ namespace renderdocui.Windows
             ToolStripButton but = sender as ToolStripButton;
             if (but != null)
             {
-                SelectEvent(0, (UInt32)but.Tag);
+                SelectEvent((UInt32)but.Tag);
             }
         }
 
@@ -1017,6 +1050,23 @@ namespace renderdocui.Windows
         private void selectVisibleColumnsToolStripMenuItem_Click(object sender, EventArgs e)
         {
             SelectColumns();
+        }
+
+        private void eventViewRightClick_Opening(object sender, CancelEventArgs e)
+        {
+            collapseAll.Enabled = expandAll.Enabled = (eventView.SelectedNode != null && eventView.SelectedNode.HasChildren);
+        }
+
+        private void expandAll_Click(object sender, EventArgs e)
+        {
+            if(eventView.SelectedNode != null)
+                eventView.SelectedNode.ExpandAll();
+        }
+
+        private void collapseAll_Click(object sender, EventArgs e)
+        {
+            if (eventView.SelectedNode != null)
+                eventView.SelectedNode.CollapseAll();
         }
 
         private void EventBrowser_FormClosed(object sender, FormClosedEventArgs e)
@@ -1072,7 +1122,7 @@ namespace renderdocui.Windows
             int index = m_Bookmark.IndexOf(EID);
 
             TreelistView.Node found = null;
-            FindEventNode(ref found, m_Core.CurFrame, EID);
+            FindEventNode(ref found, EID);
 
             if (index >= 0)
             {

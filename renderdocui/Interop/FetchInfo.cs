@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -146,6 +147,9 @@ namespace renderdoc
         }
         public static bool operator ==(ResourceFormat x, ResourceFormat y)
         {
+            if ((object)x == null) return (object)y == null;
+            if ((object)y == null) return (object)x == null;
+
             if (x.special || y.special)
                 return x.special == y.special && x.specialFormat == y.specialFormat;
 
@@ -273,13 +277,191 @@ namespace renderdoc
     };
 
     [StructLayout(LayoutKind.Sequential)]
+    public class FetchFrameConstantBindStats
+    {
+        public UInt32 calls;
+        public UInt32 sets;
+        public UInt32 nulls;
+        [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
+        public UInt32[] bindslots;
+        [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
+        public UInt32[] sizes;
+    };
+
+    [StructLayout(LayoutKind.Sequential)]
+    public class FetchFrameSamplerBindStats
+    {
+        public UInt32 calls;
+        public UInt32 sets;
+        public UInt32 nulls;
+        [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
+        public UInt32[] bindslots;
+    };
+
+    [StructLayout(LayoutKind.Sequential)]
+    public class FetchFrameResourceBindStats
+    {
+        public UInt32 calls;
+        public UInt32 sets;
+        public UInt32 nulls;
+        [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
+        public UInt32[] types;
+        [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
+        public UInt32[] bindslots;
+    };
+
+    [StructLayout(LayoutKind.Sequential)]
+    public class FetchFrameUpdateStats
+    {
+        public UInt32 calls;
+        public UInt32 clients;
+        public UInt32 servers;
+        [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
+        public UInt32[] types;
+        [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
+        public UInt32[] sizes;
+    };
+
+    [StructLayout(LayoutKind.Sequential)]
+    public class FetchFrameDrawStats
+    {
+        public UInt32 calls;
+        public UInt32 instanced;
+        public UInt32 indirect;
+        [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
+        public UInt32[] counts;
+    };
+
+    [StructLayout(LayoutKind.Sequential)]
+    public class FetchFrameDispatchStats
+    {
+        public UInt32 calls;
+        public UInt32 indirect;
+    };
+
+    [StructLayout(LayoutKind.Sequential)]
+    public class FetchFrameIndexBindStats
+    {
+        public UInt32 calls;
+        public UInt32 sets;
+        public UInt32 nulls;
+    };
+
+    [StructLayout(LayoutKind.Sequential)]
+    public class FetchFrameVertexBindStats
+    {
+        public UInt32 calls;
+        public UInt32 sets;
+        public UInt32 nulls;
+        [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
+        public UInt32[] bindslots;
+    };
+
+    [StructLayout(LayoutKind.Sequential)]
+    public class FetchFrameLayoutBindStats
+    {
+        public UInt32 calls;
+        public UInt32 sets;
+        public UInt32 nulls;
+    };
+
+    [StructLayout(LayoutKind.Sequential)]
+    public class FetchFrameShaderStats
+    {
+        public UInt32 calls;
+        public UInt32 sets;
+        public UInt32 nulls;
+        public UInt32 redundants;
+    };
+
+    [StructLayout(LayoutKind.Sequential)]
+    public class FetchFrameBlendStats
+    {
+        public UInt32 calls;
+        public UInt32 sets;
+        public UInt32 nulls;
+        public UInt32 redundants;
+    };
+
+    [StructLayout(LayoutKind.Sequential)]
+    public class FetchFrameDepthStencilStats
+    {
+        public UInt32 calls;
+        public UInt32 sets;
+        public UInt32 nulls;
+        public UInt32 redundants;
+    };
+
+    [StructLayout(LayoutKind.Sequential)]
+    public class FetchFrameRasterizationStats
+    {
+        public UInt32 calls;
+        public UInt32 sets;
+        public UInt32 nulls;
+        public UInt32 redundants;
+        [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
+        public UInt32[] viewports;
+        [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
+        public UInt32[] rects;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public class FetchFrameOutputStats
+    {
+        public UInt32 calls;
+        public UInt32 sets;
+        public UInt32 nulls;
+        [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
+        public UInt32[] bindslots;
+    };
+
+    [StructLayout(LayoutKind.Sequential)]
+    public class FetchFrameStatistics
+    {
+        public UInt32 recorded;
+        [CustomMarshalAs(CustomUnmanagedType.FixedArray, FixedLength = (int)ShaderStageType.Count)]
+        public FetchFrameConstantBindStats[] constants;
+        [CustomMarshalAs(CustomUnmanagedType.FixedArray, FixedLength = (int)ShaderStageType.Count)]
+        public FetchFrameSamplerBindStats[] samplers;
+        [CustomMarshalAs(CustomUnmanagedType.FixedArray, FixedLength = (int)ShaderStageType.Count)]
+        public FetchFrameResourceBindStats[] resources;
+        [CustomMarshalAs(CustomUnmanagedType.CustomClass)]
+        public FetchFrameUpdateStats updates;
+        [CustomMarshalAs(CustomUnmanagedType.CustomClass)]
+        public FetchFrameDrawStats draws;
+        [CustomMarshalAs(CustomUnmanagedType.CustomClass)]
+        public FetchFrameDispatchStats dispatches;
+        [CustomMarshalAs(CustomUnmanagedType.CustomClass)]
+        public FetchFrameIndexBindStats indices;
+        [CustomMarshalAs(CustomUnmanagedType.CustomClass)]
+        public FetchFrameVertexBindStats vertices;
+        [CustomMarshalAs(CustomUnmanagedType.CustomClass)]
+        public FetchFrameLayoutBindStats layouts;
+        [CustomMarshalAs(CustomUnmanagedType.FixedArray, FixedLength = (int)ShaderStageType.Count)]
+        public FetchFrameShaderStats[] shaders;
+        [CustomMarshalAs(CustomUnmanagedType.CustomClass)]
+        public FetchFrameBlendStats blends;
+        [CustomMarshalAs(CustomUnmanagedType.CustomClass)]
+        public FetchFrameDepthStencilStats depths;
+        [CustomMarshalAs(CustomUnmanagedType.CustomClass)]
+        public FetchFrameRasterizationStats rasters;
+        [CustomMarshalAs(CustomUnmanagedType.CustomClass)]
+        public FetchFrameOutputStats outputs;
+    };
+
+[StructLayout(LayoutKind.Sequential)]
     public class FetchFrameInfo
     {
         public UInt32 frameNumber;
         public UInt32 firstEvent;
         public UInt64 fileOffset;
+        public UInt64 fileSize;
+        public UInt64 persistentSize;
+        public UInt64 initDataSize;
         public UInt64 captureTime;
         public ResourceId immContextId;
+        [CustomMarshalAs(CustomUnmanagedType.CustomClass)]
+        public FetchFrameStatistics stats;
 
         [CustomMarshalAs(CustomUnmanagedType.TemplatedArray)]
         public DebugMessage[] debugMessages;
@@ -329,9 +511,40 @@ namespace renderdoc
         public string name;
 
         public DrawcallFlags flags;
+        
+        [CustomMarshalAs(CustomUnmanagedType.FixedArray, FixedLength = 4)]
+        public float[] markerColour;
+
+        public System.Drawing.Color GetColor()
+        {
+            float red = markerColour[0];
+            float green = markerColour[1];
+            float blue = markerColour[2];
+            float alpha = markerColour[3];
+
+            return System.Drawing.Color.FromArgb(
+                (int)(alpha * 255.0f),
+                (int)(red * 255.0f),
+                (int)(green * 255.0f),
+                (int)(blue * 255.0f)
+                );
+        }
+
+        public bool ShouldUseWhiteText()
+        {
+            float red = markerColour[0];
+            float green = markerColour[1];
+            float blue = markerColour[2];
+            float alpha = markerColour[3];
+
+            double luminance = 0.2126 * Math.Pow(red, 2.2) + 0.7152 * Math.Pow(green, 2.2) + 0.0722 * Math.Pow(blue, 2.2);
+
+            return luminance < 0.2;
+        }
 
         public UInt32 numIndices;
         public UInt32 numInstances;
+        public Int32 baseVertex;
         public UInt32 indexOffset;
         public UInt32 vertexOffset;
         public UInt32 instanceOffset;
@@ -374,11 +587,12 @@ namespace renderdoc
     public struct MeshFormat
     {
         public ResourceId idxbuf;
-        public UInt32 idxoffs;
+        public UInt64 idxoffs;
         public UInt32 idxByteWidth;
+        public Int32 baseVertex;
 
         public ResourceId buf;
-        public UInt32 offset;
+        public UInt64 offset;
         public UInt32 stride;
 
         public UInt32 compCount;
@@ -386,6 +600,8 @@ namespace renderdoc
         public FormatComponentType compType;
         public bool bgraOrder;
         public SpecialFormat specialFormat;
+
+        public FloatVector meshColour;
 
         public bool showAlpha;
 
@@ -408,15 +624,14 @@ namespace renderdoc
         public float fov = 90.0f;
         public float aspect = 0.0f;
 
-        public bool thisDrawOnly = true;
+        public bool showPrevInstances = false;
+        public bool showAllInstances = false;
+        public bool showWholePass = false;
         public UInt32 curInstance = 0;
 
         public UInt32 highlightVert;
         public MeshFormat position;
         public MeshFormat secondary;
-
-        public FloatVector prevMeshColour = new FloatVector();
-        public FloatVector currentMeshColour = new FloatVector();
 
         public FloatVector minBounds = new FloatVector();
         public FloatVector maxBounds = new FloatVector();

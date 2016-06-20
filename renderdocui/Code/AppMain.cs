@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -57,6 +58,12 @@ namespace renderdocui.Code
             if(args.Contains("--registerCAPext"))
             {
                 Helpers.InstallCAPAssociation();
+                return;
+            }
+
+            if (args.Contains("--registerVKLayer"))
+            {
+                Helpers.RegisterVulkanLayer();
                 return;
             }
 
@@ -149,12 +156,37 @@ namespace renderdocui.Code
 
             var core = new Core(filename, remoteHost, remoteIdent, temp, cfg);
 
-            foreach (var a in args)
+            for(int i=0; i < args.Length; i++)
             {
+                var a = args[i];
+
                 if (a.ToUpperInvariant() == "--UPDATEDONE")
                 {
                     cfg.CheckUpdate_UpdateAvailable = false;
                     cfg.CheckUpdate_UpdateResponse = "";
+
+                    bool hasOtherJSON;
+                    bool thisRegistered;
+                    string[] otherJSONs;
+
+                    bool configured = Helpers.CheckVulkanLayerRegistration(out hasOtherJSON, out thisRegistered, out otherJSONs);
+
+                    // if nothing is configured (ie. no other JSON files), then set up our layer
+                    // as part of the update process.
+                    if (!configured && !hasOtherJSON && !thisRegistered)
+                    {
+                        Helpers.RegisterVulkanLayer();
+                    }
+
+                    Helpers.UpdateInstalledVersionNumber();
+                }
+
+                if (a.ToUpperInvariant() == "--UPDATEFAILED")
+                {
+                    if(i < args.Length-1)
+                        MessageBox.Show(String.Format("Error applying update: {0}", args[i+1]), "Error updating", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    else
+                        MessageBox.Show("Unknown error applying update", "Error updating", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
 

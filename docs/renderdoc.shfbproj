@@ -84,6 +84,8 @@
     <ResourceItems Include="Resources.items" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="API.aml" />
+    <None Include="Vulkan.aml" />
     <None Include="Windows\PythonShell.aml" />
     <None Include="OpenGL.aml" />
     <None Include="Windows\DebugMessages.aml" />
@@ -121,6 +123,10 @@
     <Tokens Include="Tokens.tokens" />
   </ItemGroup>
   <ItemGroup>
+    <Image Include="imgs\Screenshots\LayerRegistration.png">
+      <ImageId>LayerRegistration</ImageId>
+      <AlternateText>Vulkan Layer Registration</AlternateText>
+    </Image>
     <Image Include="imgs\Screenshots\PixelHistoryTimeline.png">
       <ImageId>PixelHistoryTimeline</ImageId>
       <AlternateText>Pixel History Timeline</AlternateText>
@@ -336,11 +342,11 @@
       <ImageId>NamedTex</ImageId>
       <AlternateText>Showing an annotated texture</AlternateText>
     </Image>
-    <Image Include="imgs\Screenshots\Attaching.png">
+    <Image Include="imgs\Screenshots\Injecting.png">
       <ImageId>Attaching</ImageId>
       <AlternateText>Attaching</AlternateText>
       <AlternateText>Attaching to a process</AlternateText>
-      <ImageId>Attaching</ImageId>
+      <ImageId>Injecting</ImageId>
     </Image>
     <Image Include="imgs\Screenshots\PixelContext.png">
       <ImageId>PixelContext</ImageId>

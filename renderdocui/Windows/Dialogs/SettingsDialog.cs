@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -78,6 +79,11 @@ namespace renderdocui.Windows.Dialogs
 
             EventBrowser_TimeUnit.SelectedIndex = (int)m_Core.Config.EventBrowser_TimeUnit;
             EventBrowser_HideEmpty.Checked = m_Core.Config.EventBrowser_HideEmpty;
+            EventBrowser_ApplyColours.Checked = m_Core.Config.EventBrowser_ApplyColours;
+            EventBrowser_ColourEventRow.Checked = m_Core.Config.EventBrowser_ColourEventRow;
+
+            // disable sub-checkbox
+            EventBrowser_ColourEventRow.Enabled = EventBrowser_ApplyColours.Checked;
 
             initialising = true;
 
@@ -186,6 +192,23 @@ namespace renderdocui.Windows.Dialogs
             m_Core.Config.Serialize(Core.ConfigFilename);
         }
 
+        private void EventBrowser_ApplyColours_CheckedChanged(object sender, EventArgs e)
+        {
+            m_Core.Config.EventBrowser_ApplyColours = EventBrowser_ApplyColours.Checked;
+
+            // disable sub-checkbox
+            EventBrowser_ColourEventRow.Enabled = EventBrowser_ApplyColours.Checked;
+
+            m_Core.Config.Serialize(Core.ConfigFilename);
+        }
+
+        private void EventBrowser_ColourEventRow_CheckedChanged(object sender, EventArgs e)
+        {
+            m_Core.Config.EventBrowser_ColourEventRow = EventBrowser_ColourEventRow.Checked;
+
+            m_Core.Config.Serialize(Core.ConfigFilename);
+        }
+
         private void browseCaptureDirectory_Click(object sender, EventArgs e)
         {
             try
@@ -206,6 +229,20 @@ namespace renderdocui.Windows.Dialogs
             {
                 m_Core.Config.CaptureSavePath = browserCaptureDialog.SelectedPath;
             }
+        }
+
+        private void chooseSearchPaths_Click(object sender, EventArgs e)
+        {
+            var editor = new OrderedListEditor(m_Core, "Shader debug info search paths", "Search Path", OrderedListEditor.Browsing.Folder);
+
+            foreach (string path in m_Core.Config.GetConfigSetting("shader.debug.searchPaths").Split(';'))
+                if(path.Trim() != "")
+                    editor.AddItem(path);
+
+            DialogResult res = editor.ShowDialog();
+
+            if (res == DialogResult.OK)
+                m_Core.Config.SetConfigSetting("shader.debug.searchPaths", String.Join(";", editor.GetItems()));
         }
     }
 }

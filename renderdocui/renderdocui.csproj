@@ -43,8 +43,8 @@
   <PropertyGroup>
     <ApplicationIcon>Resources\icon.ico</ApplicationIcon>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Profile|x86'">
-    <OutputPath>..\Win32\Profile\</OutputPath>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Development|x86'">
+    <OutputPath>..\Win32\Development\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <Optimize>false</Optimize>
     <DebugType>pdbonly</DebugType>
@@ -64,8 +64,8 @@
     <CodeAnalysisIgnoreBuiltInRuleSets>false</CodeAnalysisIgnoreBuiltInRuleSets>
     <CodeAnalysisIgnoreBuiltInRules>false</CodeAnalysisIgnoreBuiltInRules>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Profile|x64'">
-    <OutputPath>..\x64\Profile\</OutputPath>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Development|x64'">
+    <OutputPath>..\x64\Development\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <DebugType>pdbonly</DebugType>
     <PlatformTarget>x64</PlatformTarget>
@@ -107,6 +107,7 @@
     <Compile Include="Code\CommonPipelineState.cs" />
     <Compile Include="Code\FormatElement.cs" />
     <Compile Include="Interop\Camera.cs" />
+    <Compile Include="Interop\VulkanPipelineState.cs" />
     <Compile Include="Interop\Formatter.cs" />
     <Compile Include="Code\Helpers.cs" />
     <Compile Include="Code\LogViewerForm.cs" />
@@ -240,6 +241,12 @@
     <Compile Include="Windows\Dialogs\RemoteHostSelect.Designer.cs">
       <DependentUpon>RemoteHostSelect.cs</DependentUpon>
     </Compile>
+    <Compile Include="Windows\Dialogs\OrderedListEditor.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Windows\Dialogs\OrderedListEditor.Designer.cs">
+      <DependentUpon>OrderedListEditor.cs</DependentUpon>
+    </Compile>
     <Compile Include="Windows\Dialogs\ReplayHostManager.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -288,6 +295,12 @@
     <Compile Include="Windows\Dialogs\LiveCapture.Designer.cs">
       <DependentUpon>LiveCapture.cs</DependentUpon>
     </Compile>
+    <Compile Include="Windows\PipelineState\VulkanPipelineStateViewer.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Windows\PipelineState\VulkanPipelineStateViewer.Designer.cs">
+      <DependentUpon>VulkanPipelineStateViewer.cs</DependentUpon>
+    </Compile>
     <Compile Include="Windows\PipelineState\GLPipelineStateViewer.cs">
       <SubType>UserControl</SubType>
     </Compile>
@@ -317,6 +330,12 @@
     </Compile>
     <Compile Include="Windows\ShaderViewer.Designer.cs">
       <DependentUpon>ShaderViewer.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Windows\StatisticsViewer.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Windows\StatisticsViewer.Designer.cs">
+      <DependentUpon>StatisticsViewer.cs</DependentUpon>
     </Compile>
     <Compile Include="Windows\TextureViewer.cs">
       <SubType>Form</SubType>
@@ -381,6 +400,9 @@
     <EmbeddedResource Include="Windows\Dialogs\PythonShell.resx">
       <DependentUpon>PythonShell.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="Windows\Dialogs\OrderedListEditor.resx">
+      <DependentUpon>OrderedListEditor.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Windows\Dialogs\RemoteHostSelect.resx">
       <DependentUpon>RemoteHostSelect.cs</DependentUpon>
     </EmbeddedResource>
@@ -408,6 +430,9 @@
     <EmbeddedResource Include="Windows\Dialogs\LiveCapture.resx">
       <DependentUpon>LiveCapture.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="Windows\PipelineState\VulkanPipelineStateViewer.resx">
+      <DependentUpon>VulkanPipelineStateViewer.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Windows\PipelineState\GLPipelineStateViewer.resx">
       <DependentUpon>GLPipelineStateViewer.cs</DependentUpon>
     </EmbeddedResource>
@@ -422,6 +447,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Windows\ShaderViewer.resx">
       <DependentUpon>ShaderViewer.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Windows\StatisticsViewer.resx">
+      <DependentUpon>StatisticsViewer.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Windows\TextureViewer.resx">
       <DependentUpon>TextureViewer.cs</DependentUpon>
@@ -485,12 +513,15 @@
     <Content Include="3rdparty\ScintillaNET\SciLexer.dll">
       <Link>SciLexer.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
     </Content>
     <Content Include="3rdparty\ScintillaNET\SciLexer64.dll">
       <Link>SciLexer64.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
     </Content>
     <Content Include="Controls\TreeListView\README.txt" />
+    <None Include="Resources\up_arrow.png" />
     <None Include="Resources\wireframe_mesh.png" />
     <None Include="Resources\zoom.png" />
     <None Include="Resources\wand.png" />
@@ -519,6 +550,8 @@
     <None Include="Resources\asterisk_orange.png" />
     <None Include="Resources\folder_page.png" />
     <EmbeddedResource Include="Resources\glsl.xml" />
+    <None Include="Resources\page_white_code.png" />
+    <None Include="Resources\down_arrow.png" />
     <Content Include="Resources\RightArrow_Green_16x16.png" />
     <Content Include="Resources\icon.ico" />
     <None Include="Resources\page_white_delete.png" />

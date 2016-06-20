@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -36,7 +37,7 @@ using System.Resources;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Baldur Karlsson")]
 [assembly: AssemblyProduct("RenderDoc UI")]
-[assembly: AssemblyCopyright("Copyright © 2015 Baldur Karlsson")]
+[assembly: AssemblyCopyright("Copyright © 2016 Baldur Karlsson")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -58,8 +59,8 @@ using System.Resources;
 // You can specify all the values or you can default the Build and Revision Numbers 
 // by using the '*' as shown below:
 // [assembly: AssemblyVersion("1.0.*")]
-[assembly: AssemblyVersion("0.27.0.0")]
-[assembly: AssemblyFileVersion("0.27.0.0")]
+[assembly: AssemblyVersion("0.30.0.0")]
+[assembly: AssemblyFileVersion("0.30.0.0")]
 
 // this can be replaced with the git hash of the commit being built from e.g. in a script
 [assembly: AssemblyInformationalVersion("NO_GIT_COMMIT_HASH_DEFINED")]

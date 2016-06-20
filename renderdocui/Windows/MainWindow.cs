@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -159,8 +160,6 @@ namespace renderdocui.Windows
             m_InitRemoteIdent = remoteIdent;
             OwnTemporaryLog = temp;
 
-            logStatisticsToolStripMenuItem.Enabled = false;
-
             resolveSymbolsToolStripMenuItem.Enabled = false;
             resolveSymbolsToolStripMenuItem.Text = "Resolve Symbols";
 
@@ -214,32 +213,7 @@ namespace renderdocui.Windows
 
             if (m_InitFilename.Length > 0)
             {
-                if (Path.GetExtension(m_InitFilename) == ".rdc")
-                {
-                    LoadLogAsync(m_InitFilename, false);
-                }
-                else if (Path.GetExtension(m_InitFilename) == ".cap")
-                {
-                    if (m_Core.CaptureDialog == null)
-                        m_Core.CaptureDialog = new Dialogs.CaptureDialog(m_Core, OnCaptureTrigger, OnInjectTrigger);
-
-                    m_Core.CaptureDialog.LoadSettings(m_InitFilename);
-                    m_Core.CaptureDialog.Show(dockPanel);
-
-                    // workaround for Show() not doing this
-                    if (m_Core.CaptureDialog.DockState == DockState.DockBottomAutoHide ||
-                        m_Core.CaptureDialog.DockState == DockState.DockLeftAutoHide ||
-                        m_Core.CaptureDialog.DockState == DockState.DockRightAutoHide ||
-                        m_Core.CaptureDialog.DockState == DockState.DockTopAutoHide)
-                    {
-                        dockPanel.ActiveAutoHideContent = m_Core.CaptureDialog;
-                    }
-                }
-                else
-                {
-                    // not a recognised filetype, see if we can load it anyway
-                    LoadLogAsync(m_InitFilename, false);
-                }
+                LoadFromFilename(m_InitFilename);
 
                 m_InitFilename = "";
             }
@@ -287,8 +261,6 @@ namespace renderdocui.Windows
 
             m_MessageTick.Dispose();
             m_MessageTick = null;
-
-            logStatisticsToolStripMenuItem.Enabled = false;
 
             resolveSymbolsToolStripMenuItem.Enabled = false;
             resolveSymbolsToolStripMenuItem.Text = "Resolve Symbols";
@@ -390,8 +362,6 @@ namespace renderdocui.Windows
                 }));
             });
 
-            logStatisticsToolStripMenuItem.Enabled = true;
-
             saveLogToolStripMenuItem.Enabled = true;
 
             SetTitle();
@@ -401,7 +371,7 @@ namespace renderdocui.Windows
             m_Core.GetEventBrowser().Focus();
         }
 
-        public void OnEventSelected(UInt32 frameID, UInt32 eventID)
+        public void OnEventSelected(UInt32 eventID)
         {
         }
 
@@ -492,6 +462,8 @@ namespace renderdocui.Windows
                 return m_Core.GetDebugMessages();
             else if (IsPersist(persistString, typeof(TimelineBar).ToString()))
                 return m_Core.GetTimelineBar();
+            else if (IsPersist(persistString, typeof(StatisticsViewer).ToString()))
+                return m_Core.GetStatisticsViewer();
             else if (IsPersist(persistString, typeof(Dialogs.PythonShell).ToString()))
             {
                 return new Dialogs.PythonShell(m_Core);
@@ -616,6 +588,9 @@ namespace renderdocui.Windows
                 Text += String.Format("{0}-beta - {1}", VersionString, GitCommitHash);
             else
                 Text += String.Format("Unofficial release ({0} - {1})", VersionString, GitCommitHash);
+
+            if (IsVersionMismatched())
+                Text += " - !! VERSION MISMATCH DETECTED !!";
         }
 
         private void SetTitle()
@@ -787,7 +762,7 @@ namespace renderdocui.Windows
             statusText.Text = "Loading " + filename + "...";
         }
 
-        private void PopulateRecentFiles()
+        public void PopulateRecentFiles()
         {
             while (recentFilesToolStripMenuItem.DropDownItems.Count > 0)
             {
@@ -859,6 +834,41 @@ namespace renderdocui.Windows
         {
             if (PromptCloseLog())
                 LoadLogAsync(fn, temporary);
+        }
+
+        private void OpenCaptureConfigFile(String filename)
+        {
+            if (m_Core.CaptureDialog == null)
+                m_Core.CaptureDialog = new Dialogs.CaptureDialog(m_Core, OnCaptureTrigger, OnInjectTrigger);
+
+            m_Core.CaptureDialog.LoadSettings(filename);
+            m_Core.CaptureDialog.Show(dockPanel);
+
+            // workaround for Show() not doing this
+            if (m_Core.CaptureDialog.DockState == DockState.DockBottomAutoHide ||
+                m_Core.CaptureDialog.DockState == DockState.DockLeftAutoHide ||
+                m_Core.CaptureDialog.DockState == DockState.DockRightAutoHide ||
+                m_Core.CaptureDialog.DockState == DockState.DockTopAutoHide)
+            {
+                dockPanel.ActiveAutoHideContent = m_Core.CaptureDialog;
+            }
+        }
+
+        private void LoadFromFilename(string filename)
+        {
+            if (Path.GetExtension(filename) == ".rdc")
+            {
+                LoadLogfile(filename, false);
+            }
+            else if (Path.GetExtension(filename) == ".cap")
+            {
+                OpenCaptureConfigFile(filename);
+            }
+            else
+            {
+                // not a recognised filetype, see if we can load it anyway
+                LoadLogfile(filename, false);
+            }
         }
 
         public void CloseLogfile()
@@ -973,7 +983,7 @@ namespace renderdocui.Windows
 
             if (res == DialogResult.OK)
             {
-                LoadLogAsync(openDialog.FileName, false);
+                LoadFromFilename(openDialog.FileName);
             }
         }
 
@@ -1011,8 +1021,47 @@ namespace renderdocui.Windows
 
         private delegate void UpdateResultMethod(UpdateResult res);
 
+        private bool IsVersionMismatched()
+        {
+            return "v" + StaticExports.GetVersionString() != VersionString;
+        }
+
+        private bool HandleMismatchedVersions()
+        {
+            if (IsVersionMismatched())
+            {
+                if (!OfficialVersion && !BetaVersion)
+                {
+                    MessageBox.Show("You are running an unofficial build with mismatched core and UI versions.\n" +
+                        "Double check where you got your build from and do a sanity check!",
+                        "Unofficial build - mismatched versions", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    DialogResult mb = MessageBox.Show("RenderDoc has detected mismatched versions between its internal module and UI.\n" +
+                        "This is likely caused by a buggy update in the past which partially updated your install. Likely because a " +
+                        "program was running with renderdoc while the update happened.\n" +
+                        "You should reinstall RenderDoc immediately as this configuration is almost guaranteed to crash.\n\n" +
+                        "Would you like to open the downloads page?",
+                        "Mismatched versions", MessageBoxButtons.YesNo, MessageBoxIcon.Exclamation);
+
+                    if (mb == DialogResult.Yes)
+                        Process.Start("https://renderdoc.org/builds");
+
+                    SetUpdateAvailable();
+                }
+                return true;
+            }
+
+            return false;
+        }
+
         private void CheckUpdates(bool forceCheck = false, UpdateResultMethod callback = null)
         {
+            bool mismatch = HandleMismatchedVersions();
+            if (mismatch)
+                return;
+
             if (!forceCheck && !m_Core.Config.CheckUpdate_AllowChecks)
             {
                 updateToolStripMenuItem.Text = "Update checks disabled";
@@ -1174,12 +1223,19 @@ namespace renderdocui.Windows
 
         private void updateToolStripMenuItem_Click(object sender, EventArgs e)
         {
+            bool mismatch = HandleMismatchedVersions();
+            if (mismatch)
+                return;
+
             SetUpdateAvailable();
             UpdatePopup();
         }
 
         private bool PromptCloseLog()
         {
+            if (!m_Core.LogLoaded)
+                return true;
+
             string deletepath = "";
 
             if (OwnTemporaryLog)
@@ -1246,6 +1302,8 @@ namespace renderdocui.Windows
                     // we copy the (possibly) temp log to the desired path, but the log item remains referring to the original path.
                     // This ensures that if the user deletes the saved path we can still open or re-save it.
                     File.Copy(m_Core.LogFileName, saveDialog.FileName, true);
+                    m_Core.Config.AddRecentFile(m_Core.Config.RecentLogFiles, saveDialog.FileName, 10);
+                    PopulateRecentFiles();
                     SetTitle(saveDialog.FileName);
                 }
                 catch (System.Exception ex)
@@ -1280,7 +1338,7 @@ namespace renderdocui.Windows
 
                         if (eb.Visible && eb.HasBookmark(i))
                         {
-                            m_Core.SetEventID(null, m_Core.CurFrame, eb.GetBookmark(i));
+                            m_Core.SetEventID(null, eb.GetBookmark(i));
 
                             return true;
                         }
@@ -1343,139 +1401,6 @@ namespace renderdocui.Windows
             }
         }
 
-        private void CountDrawsDispatches(FetchDrawcall draw, ref int numDraws, ref int numDispatches)
-        {
-            if ((draw.flags & DrawcallFlags.Drawcall) != 0)
-            {
-                numDraws++;
-            }
-            if ((draw.flags & DrawcallFlags.Dispatch) != 0)
-            {
-                numDraws++;
-                numDispatches++;
-            }
-
-            if(draw.children != null)
-            {
-                foreach (var d in draw.children)
-                    CountDrawsDispatches(d, ref numDraws, ref numDispatches);
-            }
-        }
-
-        private void logStatisticsToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            long fileSize = (new FileInfo(m_Core.LogFileName)).Length;
-
-            int firstIdx = 0;
-
-            var firstDrawcall = m_Core.CurDrawcalls[firstIdx];
-            while (firstDrawcall.children != null && firstDrawcall.children.Length > 0)
-                firstDrawcall = firstDrawcall.children[0];
-
-            while (firstDrawcall.events.Length == 0)
-            {
-                if (firstDrawcall.next != null)
-                {
-                    firstDrawcall = firstDrawcall.next;
-                    while (firstDrawcall.children != null && firstDrawcall.children.Length > 0)
-                        firstDrawcall = firstDrawcall.children[0];
-                }
-                else
-                {
-                    firstDrawcall = m_Core.CurDrawcalls[++firstIdx];
-                    while (firstDrawcall.children != null && firstDrawcall.children.Length > 0)
-                        firstDrawcall = firstDrawcall.children[0];
-                }
-            }
-
-            UInt64 persistantData = (UInt64)fileSize - firstDrawcall.events[0].fileOffset;
-
-            var lastDraw = m_Core.CurDrawcalls[m_Core.CurDrawcalls.Length - 1];
-            while (lastDraw.children != null && lastDraw.children.Length > 0)
-                lastDraw = lastDraw.children[lastDraw.children.Length - 1];
-
-            uint numAPIcalls = lastDraw.eventID;
-
-            int numDrawcalls = 0;
-            int numDispatches = 0;
-
-            foreach(var d in m_Core.CurDrawcalls)
-                CountDrawsDispatches(d, ref numDrawcalls, ref numDispatches);
-
-            int numTextures = m_Core.CurTextures.Length;
-            int numBuffers = m_Core.CurBuffers.Length;
-
-            ulong IBBytes = 0;
-            ulong VBBytes = 0;
-            ulong BufBytes = 0;
-            foreach(var b in m_Core.CurBuffers)
-            {
-                BufBytes += b.byteSize;
-
-                if((b.creationFlags & BufferCreationFlags.IB) != 0)
-                    IBBytes += b.byteSize;
-                if((b.creationFlags & BufferCreationFlags.VB) != 0)
-                    VBBytes += b.byteSize;
-            }
-
-            ulong RTBytes = 0;
-            ulong TexBytes = 0;
-            ulong LargeTexBytes = 0;
-
-            int numRTs = 0;
-            float texW = 0, texH = 0;
-            float largeTexW = 0, largeTexH = 0;
-            int texCount = 0, largeTexCount = 0;
-            foreach (var t in m_Core.CurTextures)
-            {
-                if ((t.creationFlags & (TextureCreationFlags.RTV|TextureCreationFlags.DSV)) != 0)
-                {
-                    numRTs++;
-
-                    RTBytes += t.byteSize;
-                }
-                else
-                {
-                    texW += (float)t.width;
-                    texH += (float)t.height;
-                    texCount++;
-
-                    TexBytes += t.byteSize;
-
-                    if (t.width > 32 && t.height > 32)
-                    {
-                        largeTexW += (float)t.width;
-                        largeTexH += (float)t.height;
-                        largeTexCount++;
-
-                        LargeTexBytes += t.byteSize;
-                    }
-                }
-            }
-
-            texW /= texCount;
-            texH /= texCount;
-
-            largeTexW /= largeTexCount;
-            largeTexH /= largeTexCount;
-
-            string msg =
-                String.Format("Stats for {0}.\n\nFile size: {1:N2}MB\nPersistant Data (approx): {2:N2}MB\n\n",
-                              Path.GetFileName(m_Core.LogFileName),
-                              (float)fileSize / (1024.0f * 1024.0f), (float)persistantData / (1024.0f * 1024.0f)) +
-                String.Format("Draw calls: {0} ({1} of them are dispatches)\nAPI calls: {2}\nAPI:Draw call ratio: {3}\n\n",
-                              numDrawcalls, numDispatches, numAPIcalls, (float)numAPIcalls / (float)numDrawcalls) +
-                String.Format("{0} Textures - {1:N2} MB ({2:N2} MB over 32x32), {3} RTs - {4:N2} MB.\nAvg. tex dimension: {5}x{6} ({7}x{8} over 32x32)\n",
-                              numTextures, (float)TexBytes / (1024.0f * 1024.0f), (float)LargeTexBytes / (1024.0f * 1024.0f),
-                              numRTs, (float)RTBytes / (1024.0f * 1024.0f),
-                              texW, texH, largeTexW, largeTexH) +
-                String.Format("{0} Buffers - {1:N2} MB total {2:N2} MB IBs {3:N2} MB VBs.\n",
-                             numBuffers, (float)BufBytes / (1024.0f * 1024.0f), (float)IBBytes / (1024.0f * 1024.0f), (float)VBBytes / (1024.0f * 1024.0f)) +
-                String.Format("{0} MB - Grand total GPU buffer + texture load", (float)(TexBytes + BufBytes + RTBytes) / (1024.0f * 1024.0f));
-
-            MessageBox.Show(msg);
-        }
-
         private void recentLogMenuItem_Click(object sender, EventArgs e)
         {
             ToolStripDropDownItem item = (ToolStripDropDownItem)sender;
@@ -1509,20 +1434,7 @@ namespace renderdocui.Windows
 
             if (File.Exists(filename))
             {
-                if (m_Core.CaptureDialog == null)
-                    m_Core.CaptureDialog = new Dialogs.CaptureDialog(m_Core, OnCaptureTrigger, OnInjectTrigger);
-
-                m_Core.CaptureDialog.LoadSettings(filename);
-                m_Core.CaptureDialog.Show(dockPanel);
-
-                // workaround for Show() not doing this
-                if (m_Core.CaptureDialog.DockState == DockState.DockBottomAutoHide ||
-                    m_Core.CaptureDialog.DockState == DockState.DockLeftAutoHide ||
-                    m_Core.CaptureDialog.DockState == DockState.DockRightAutoHide ||
-                    m_Core.CaptureDialog.DockState == DockState.DockTopAutoHide)
-                {
-                    dockPanel.ActiveAutoHideContent = m_Core.CaptureDialog;
-                }
+                OpenCaptureConfigFile(filename);
             }
             else
             {
@@ -1664,6 +1576,11 @@ namespace renderdocui.Windows
             m_Core.GetTimelineBar().Show(dockPanel);
         }
 
+        private void statisticsViewerToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            m_Core.GetStatisticsViewer().Show(dockPanel);
+        }
+
         #endregion
 
         #region Symbol resolving
@@ -1720,7 +1637,7 @@ namespace renderdocui.Windows
             string fn = ValidData(e.Data);
             if (fn.Length > 0)
             {
-                LoadLogfile(fn, false);
+                LoadFromFilename(fn);
             }
         }
 
@@ -1732,6 +1649,6 @@ namespace renderdocui.Windows
                 e.Effect = DragDropEffects.None;
         }
 
-        #endregion
+    #endregion
     }
 }

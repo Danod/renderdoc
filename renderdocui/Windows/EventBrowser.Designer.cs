@@ -41,6 +41,8 @@
             this.eventView = new TreelistView.TreeListView();
             this.eventViewRightClick = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.selectVisibleColumnsToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.expandAll = new System.Windows.Forms.ToolStripMenuItem();
+            this.collapseAll = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStrip1 = new System.Windows.Forms.ToolStrip();
             this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.findEventButton = new System.Windows.Forms.ToolStripButton();
@@ -119,7 +121,7 @@
             // 
             this.eventView.AlwaysDisplayVScroll = true;
             treeListColumn1.AutoSizeMinSize = 15;
-            treeListColumn1.Width = 48;
+            treeListColumn1.Width = 80;
             treeListColumn2.AutoSizeMinSize = 15;
             treeListColumn2.Width = 45;
             treeListColumn3.AutoSize = true;
@@ -152,17 +154,36 @@
             // eventViewRightClick
             // 
             this.eventViewRightClick.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.expandAll,
+            this.collapseAll,
             this.selectVisibleColumnsToolStripMenuItem});
             this.eventViewRightClick.Name = "contextMenuStrip1";
-            this.eventViewRightClick.Size = new System.Drawing.Size(179, 26);
+            this.eventViewRightClick.Size = new System.Drawing.Size(179, 92);
+            this.eventViewRightClick.Opening += new System.ComponentModel.CancelEventHandler(this.eventViewRightClick_Opening);
             // 
             // selectVisibleColumnsToolStripMenuItem
             // 
             this.selectVisibleColumnsToolStripMenuItem.Image = global::renderdocui.Properties.Resources.timeline_marker;
             this.selectVisibleColumnsToolStripMenuItem.Name = "selectVisibleColumnsToolStripMenuItem";
             this.selectVisibleColumnsToolStripMenuItem.Size = new System.Drawing.Size(178, 22);
-            this.selectVisibleColumnsToolStripMenuItem.Text = "Select Visible Columns";
+            this.selectVisibleColumnsToolStripMenuItem.Text = "Select &Visible Columns";
             this.selectVisibleColumnsToolStripMenuItem.Click += new System.EventHandler(this.selectVisibleColumnsToolStripMenuItem_Click);
+            // 
+            // expandAll
+            // 
+            this.expandAll.Image = global::renderdocui.Properties.Resources.fit_window;
+            this.expandAll.Name = "expandAll";
+            this.expandAll.Size = new System.Drawing.Size(178, 22);
+            this.expandAll.Text = "&Expand All";
+            this.expandAll.Click += new System.EventHandler(this.expandAll_Click);
+            // 
+            // collapseAll
+            // 
+            this.collapseAll.Image = global::renderdocui.Properties.Resources.arrow_in;
+            this.collapseAll.Name = "collapseAll";
+            this.collapseAll.Size = new System.Drawing.Size(178, 22);
+            this.collapseAll.Text = "&Collapse All";
+            this.collapseAll.Click += new System.EventHandler(this.collapseAll_Click);
             // 
             // toolStrip1
             // 
@@ -360,7 +381,6 @@
             this.ShowHint = WeifenLuo.WinFormsUI.Docking.DockState.DockLeft;
             this.Text = "Event Browser";
             this.FormClosed += new System.Windows.Forms.FormClosedEventHandler(this.EventBrowser_FormClosed);
-            this.Shown += new System.EventHandler(this.EventBrowser_Shown);
             this.Leave += new System.EventHandler(this.EventBrowser_Leave);
             this.toolStripContainer1.ContentPanel.ResumeLayout(false);
             this.toolStripContainer1.TopToolStripPanel.ResumeLayout(false);
@@ -406,6 +426,8 @@
         private System.Windows.Forms.ToolStrip bookmarkStrip;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
         private System.Windows.Forms.ToolStripButton toggleBookmark;
+        private System.Windows.Forms.ToolStripMenuItem expandAll;
+        private System.Windows.Forms.ToolStripMenuItem collapseAll;
 
     }
 }

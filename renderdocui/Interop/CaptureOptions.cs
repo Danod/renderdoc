@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -69,7 +70,7 @@ namespace renderdoc
     {
         public bool AllowVSync;
         public bool AllowFullscreen;
-        public bool DebugDeviceMode;
+        public bool APIValidation;
         public bool CaptureCallstacks;
         public bool CaptureCallstacksOnlyDraws;
         public UInt32 DelayForDebugger;

@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -450,6 +451,9 @@ namespace renderdocui.Controls
                         maxval = Math.Max(maxval, HistogramData[i]);
                     }
                 }
+
+                if (maxval == 0)
+                    maxval = 1;
 
                 for (int i = 0; i < HistogramData.Length; i++)
                 {

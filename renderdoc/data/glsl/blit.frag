@@ -1,6 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -29,5 +30,5 @@ layout (location = 0) out vec4 color_out;
 
 void main(void)
 {
-    color_out = texture2D(tex0, gl_FragCoord.xy/textureSize(tex0, 0));
+    color_out = texture(tex0, gl_FragCoord.xy/textureSize(tex0, 0));
 }

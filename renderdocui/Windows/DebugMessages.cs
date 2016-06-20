@@ -1,6 +1,7 @@
 ﻿/******************************************************************************
  * The MIT License (MIT)
  * 
+ * Copyright (c) 2015-2016 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -77,20 +78,14 @@ namespace renderdocui.Windows
             RefreshMessageList();
         }
 
-        public void OnEventSelected(UInt32 frameID, UInt32 eventID)
+        public void OnEventSelected(UInt32 eventID)
         {
-        }
-
-        private void DebugMessages_Shown(object sender, EventArgs e)
-        {
-            if (m_Core.LogLoaded)
-                OnLogfileLoaded();
         }
 
         private void messages_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex < m_VisibleMessages.Count)
-                m_Core.SetEventID(null, 0, m_Core.DebugMessages[m_VisibleMessages[e.RowIndex]].eventID);
+                m_Core.SetEventID(null, m_Core.DebugMessages[m_VisibleMessages[e.RowIndex]].eventID);
         }
 
         private bool m_SuppressRefresh = false;

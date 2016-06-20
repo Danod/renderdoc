@@ -1,11 +1,12 @@
 Debug/
 Documentation/
 Release/
-Profile/
-Profile32/
-Profile64/
+Development/
+Development32/
+Development64/
 Release32/
 Release64/
+build/
 dist/
 Resources/*.png
 qrenderdoc/Makefile*
@@ -14,10 +15,11 @@ qrenderdoc/Makefile*
 *.ilk
 *.manifest
 *.user
-bin/
+bin
 obj/
 .obj/
 *.opensdf
+*.VC.*db
 *.pdb
 *.sln.ide/
 *.so
@@ -29,8 +31,7 @@ obj/
 *.dll
 symsrv.yes
 ipch/
-*.shfbproj_*
-
+renderdoc/driver/vulkan/renderdoc_capture.json
 renderdocui/3rdparty/ironpython/pythonlibs.zip
 
 *.xcuserstate
@@ -38,3 +39,8 @@ renderdocui/3rdparty/ironpython/pythonlibs.zip
 *.xcuserstate
 
 *.xcuserstate
+*.tlog
+*.obj
+*.log
+*.lastbuildstate
+*.idb
